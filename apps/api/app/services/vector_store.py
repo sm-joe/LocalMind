@@ -57,6 +57,7 @@ class VectorStore:
         self,
         vector: list[float],
         limit: int = 5,
+        filename: str | None = None,
     ) -> list[Any]:
         if not vector:
             raise ValueError(
@@ -68,10 +69,33 @@ class VectorStore:
                 "Search limit must be greater than zero."
             )
 
+        query_arguments: dict[str, Any] = {
+            "collection_name": self.collection_name,
+            "query": vector,
+            "limit": limit,
+        }
+
+        if filename is not None:
+            normalized_filename = filename.strip()
+
+            if not normalized_filename:
+                raise ValueError(
+                    "Filename cannot be empty."
+                )
+
+            query_arguments["query_filter"] = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="filename",
+                        match=models.MatchValue(
+                            value=normalized_filename,
+                        ),
+                    )
+                ]
+            )
+
         return self.client.query_points(
-            collection_name=self.collection_name,
-            query=vector,
-            limit=limit,
+            **query_arguments,
         ).points
 
     def list_points(

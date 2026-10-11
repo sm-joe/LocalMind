@@ -246,3 +246,38 @@ def test_delete_document_rejects_empty_document_id() -> None:
         store.delete_document("   ")
 
     store.client.delete.assert_not_called()
+
+def test_search_filters_by_filename() -> None:
+    store = create_store()
+    points = [MagicMock()]
+    store.client.query_points.return_value.points = points
+
+    result = store.search(
+        vector=[0.1, 0.2, 0.3],
+        limit=5,
+        filename=" report.pdf ",
+    )
+
+    assert result == points
+
+    kwargs = store.client.query_points.call_args.kwargs
+    assert kwargs["collection_name"] == "test_collection"
+    assert kwargs["query"] == [0.1, 0.2, 0.3]
+    assert kwargs["limit"] == 5
+
+    query_filter = kwargs["query_filter"]
+    assert len(query_filter.must) == 1
+    assert query_filter.must[0].key == "filename"
+    assert query_filter.must[0].match.value == "report.pdf"
+
+
+def test_search_rejects_blank_filename() -> None:
+    store = create_store()
+
+    with pytest.raises(ValueError, match="Filename cannot be empty"):
+        store.search(
+            vector=[0.1, 0.2, 0.3],
+            filename="   ",
+        )
+
+    store.client.query_points.assert_not_called()
