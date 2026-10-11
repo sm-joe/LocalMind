@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock
+
+from unittest.mock import MagicMock, call
 
 import pytest
 from qdrant_client.http import models
@@ -22,7 +23,6 @@ def test_ensure_collection_creates_missing_collection() -> None:
     store = create_store()
 
     store.client.get_collections.return_value.collections = []
-
     store.ensure_collection(vector_size=3)
 
     store.client.create_collection.assert_called_once()
@@ -39,7 +39,6 @@ def test_ensure_collection_creates_missing_collection() -> None:
 
 def test_ensure_collection_does_not_recreate_existing_collection() -> None:
     store = create_store()
-
     existing = MagicMock()
     existing.name = "test_collection"
 
@@ -124,3 +123,126 @@ def test_search_returns_points() -> None:
         query=[0.1, 0.2, 0.3],
         limit=5,
     )
+
+
+def test_list_points_returns_records_from_multiple_pages() -> None:
+    store = create_store()
+
+    first_page = [
+        MagicMock(id="point-1"),
+        MagicMock(id="point-2"),
+    ]
+    second_page = [
+        MagicMock(id="point-3"),
+    ]
+
+    store.client.scroll.side_effect = [
+        (first_page, "next-page"),
+        (second_page, None),
+    ]
+
+    result = store.list_points(limit=2)
+
+    assert result == first_page + second_page
+    assert [point.id for point in result] == [
+        "point-1",
+        "point-2",
+        "point-3",
+    ]
+
+    assert store.client.scroll.call_args_list == [
+        call(
+            collection_name="test_collection",
+            limit=2,
+            with_payload=True,
+            with_vectors=False,
+        ),
+        call(
+            collection_name="test_collection",
+            limit=2,
+            with_payload=True,
+            with_vectors=False,
+            offset="next-page",
+        ),
+    ]
+
+
+def test_list_points_stops_when_no_next_page_exists() -> None:
+    store = create_store()
+
+    points = [MagicMock(id="point-1")]
+    store.client.scroll.return_value = (points, None)
+
+    result = store.list_points(limit=100)
+
+    assert result == points
+    store.client.scroll.assert_called_once_with(
+        collection_name="test_collection",
+        limit=100,
+        with_payload=True,
+        with_vectors=False,
+    )
+
+
+def test_list_points_rejects_invalid_limit() -> None:
+    store = create_store()
+
+    with pytest.raises(
+        ValueError,
+        match="greater than zero",
+    ):
+        store.list_points(limit=0)
+
+    store.client.scroll.assert_not_called()
+
+
+def test_list_points_rejects_non_advancing_cursor() -> None:
+    store = create_store()
+
+    points = [MagicMock(id="point-1")]
+    store.client.scroll.side_effect = [
+        (points, "next-page"),
+        (points, "next-page"),
+    ]
+
+    with pytest.raises(
+        RuntimeError,
+        match="pagination did not advance",
+    ):
+        store.list_points(limit=1)
+
+
+def test_find_document_by_hash_rejects_empty_hash() -> None:
+    store = create_store()
+
+    with pytest.raises(
+        ValueError,
+        match="cannot be empty",
+    ):
+        store.find_document_by_hash("   ")
+
+    store.client.scroll.assert_not_called()
+
+
+def test_find_points_by_filename_rejects_empty_filename() -> None:
+    store = create_store()
+
+    with pytest.raises(
+        ValueError,
+        match="cannot be empty",
+    ):
+        store.find_points_by_filename("   ")
+
+    store.client.scroll.assert_not_called()
+
+
+def test_delete_document_rejects_empty_document_id() -> None:
+    store = create_store()
+
+    with pytest.raises(
+        ValueError,
+        match="cannot be empty",
+    ):
+        store.delete_document("   ")
+
+    store.client.delete.assert_not_called()

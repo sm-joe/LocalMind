@@ -1,3 +1,4 @@
+
 from collections.abc import Sequence
 from typing import Any
 
@@ -82,14 +83,37 @@ class VectorStore:
                 "Limit must be greater than zero."
             )
 
-        records, _ = self.client.scroll(
-            collection_name=self.collection_name,
-            limit=limit,
-            with_payload=True,
-            with_vectors=False,
-        )
+        all_records: list[Any] = []
+        offset: Any = None
 
-        return records
+        while True:
+            scroll_arguments: dict[str, Any] = {
+                "collection_name": self.collection_name,
+                "limit": limit,
+                "with_payload": True,
+                "with_vectors": False,
+            }
+
+            if offset is not None:
+                scroll_arguments["offset"] = offset
+
+            records, next_offset = self.client.scroll(
+                **scroll_arguments,
+            )
+
+            all_records.extend(records)
+
+            if next_offset is None:
+                break
+
+            if next_offset == offset:
+                raise RuntimeError(
+                    "Qdrant scroll pagination did not advance."
+                )
+
+            offset = next_offset
+
+        return all_records
 
     def find_document_by_hash(
         self,
@@ -142,9 +166,7 @@ class VectorStore:
 
         return {
             "document_id": str(document_id),
-            "filename": str(
-                filename or "unknown"
-            ),
+            "filename": str(filename or "unknown"),
         }
 
     def find_points_by_filename(

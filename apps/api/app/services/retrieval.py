@@ -121,16 +121,12 @@ class RetrievalService:
         )
 
         if explicit_filename:
-            filename_result = (
-                self._retrieve_by_filename(
-                    filename=explicit_filename,
-                    limit=search_limit,
-                    total_start=total_start,
-                )
+            return self._retrieve_by_filename(
+                query=normalized_query,
+                filename=explicit_filename,
+                limit=search_limit,
+                total_start=total_start,
             )
-
-            if filename_result is not None:
-                return filename_result
 
         embedding_start = perf_counter()
 
@@ -141,8 +137,7 @@ class RetrievalService:
         )
 
         embedding_ms = (
-            perf_counter()
-            - embedding_start
+            perf_counter() - embedding_start
         ) * 1000
 
         search_start = perf_counter()
@@ -153,17 +148,68 @@ class RetrievalService:
         )
 
         search_ms = (
-            perf_counter()
-            - search_start
+            perf_counter() - search_start
         ) * 1000
 
+        return self._build_result(
+            results=results,
+            limit=search_limit,
+            embedding_ms=embedding_ms,
+            search_ms=search_ms,
+            total_start=total_start,
+        )
+
+    def _retrieve_by_filename(
+        self,
+        query: str,
+        filename: str,
+        limit: int,
+        total_start: float,
+    ) -> RetrievalResult:
+        embedding_start = perf_counter()
+
+        query_embedding = (
+            self.embedding_service.embed(query)
+        )
+
+        embedding_ms = (
+            perf_counter() - embedding_start
+        ) * 1000
+
+        search_start = perf_counter()
+
+        results = self.vector_store.search(
+            vector=query_embedding,
+            limit=limit,
+            filename=filename,
+        )
+
+        search_ms = (
+            perf_counter() - search_start
+        ) * 1000
+
+        return self._build_result(
+            results=results,
+            limit=limit,
+            embedding_ms=embedding_ms,
+            search_ms=search_ms,
+            total_start=total_start,
+        )
+
+    def _build_result(
+        self,
+        results: list[Any],
+        limit: int,
+        embedding_ms: float,
+        search_ms: float,
+        total_start: float,
+    ) -> RetrievalResult:
         candidate_scores = [
             float(result.score)
             for result in results
         ]
 
         retrieved_chunks: list[RetrievedChunk] = []
-        candidate_count = len(results)
         filtered_count = 0
 
         for result in results:
@@ -186,17 +232,20 @@ class RetrievalService:
 
             retrieved_chunks.append(chunk)
 
+        retrieved_chunks.sort(
+            key=lambda chunk: chunk.score,
+            reverse=True,
+        )
+
         scores = [
             chunk.score
             for chunk in retrieved_chunks
         ]
 
         diagnostics = RetrievalDiagnostics(
-            requested_limit=search_limit,
-            candidate_count=candidate_count,
-            returned_count=len(
-                retrieved_chunks
-            ),
+            requested_limit=limit,
+            candidate_count=len(results),
+            returned_count=len(retrieved_chunks),
             filtered_count=filtered_count,
             top_candidate_score=(
                 max(candidate_scores)
@@ -218,134 +267,14 @@ class RetrievalService:
                 if scores
                 else None
             ),
-            has_context=bool(
-                retrieved_chunks
-            ),
+            has_context=bool(retrieved_chunks),
         )
 
         performance = RetrievalPerformance(
-            embedding_ms=round(
-                embedding_ms,
-                2,
-            ),
-            search_ms=round(
-                search_ms,
-                2,
-            ),
+            embedding_ms=round(embedding_ms, 2),
+            search_ms=round(search_ms, 2),
             total_ms=round(
-                (
-                    perf_counter()
-                    - total_start
-                )
-                * 1000,
-                2,
-            ),
-        )
-
-        return RetrievalResult(
-            chunks=retrieved_chunks,
-            diagnostics=diagnostics,
-            performance=performance,
-        )
-
-    def _retrieve_by_filename(
-        self,
-        filename: str,
-        limit: int,
-        total_start: float,
-    ) -> RetrievalResult | None:
-        search_start = perf_counter()
-
-        records = (
-            self.vector_store.find_points_by_filename(
-                filename=filename,
-                limit=limit,
-            )
-        )
-
-        search_ms = (
-            perf_counter()
-            - search_start
-        ) * 1000
-
-        if not records:
-            return None
-
-        records.sort(
-            key=lambda record: int(
-                (record.payload or {}).get(
-                    "chunk_id",
-                    0,
-                )
-            )
-        )
-
-        retrieved_chunks: list[RetrievedChunk] = []
-        filtered_count = 0
-
-        for record in records[:limit]:
-            payload = record.payload or {}
-
-            chunk = self._build_chunk(
-                payload=payload,
-                score=1.0,
-            )
-
-            if chunk is None:
-                filtered_count += 1
-                continue
-
-            retrieved_chunks.append(chunk)
-
-        scores = [
-            chunk.score
-            for chunk in retrieved_chunks
-        ]
-
-        diagnostics = RetrievalDiagnostics(
-            requested_limit=limit,
-            candidate_count=len(records),
-            returned_count=len(
-                retrieved_chunks
-            ),
-            filtered_count=filtered_count,
-            top_candidate_score=(
-                1.0
-                if records
-                else None
-            ),
-            bottom_candidate_score=(
-                1.0
-                if records
-                else None
-            ),
-            top_score=(
-                max(scores)
-                if scores
-                else None
-            ),
-            bottom_score=(
-                min(scores)
-                if scores
-                else None
-            ),
-            has_context=bool(
-                retrieved_chunks
-            ),
-        )
-
-        performance = RetrievalPerformance(
-            embedding_ms=0.0,
-            search_ms=round(
-                search_ms,
-                2,
-            ),
-            total_ms=round(
-                (
-                    perf_counter()
-                    - total_start
-                )
-                * 1000,
+                (perf_counter() - total_start) * 1000,
                 2,
             ),
         )
@@ -361,9 +290,7 @@ class RetrievalService:
         cls,
         query: str,
     ) -> str | None:
-        matches = cls.FILENAME_PATTERN.findall(
-            query
-        )
+        matches = cls.FILENAME_PATTERN.findall(query)
 
         if not matches:
             return None
@@ -375,9 +302,7 @@ class RetrievalService:
                 else unquoted.strip()
             )
 
-            if cls._is_supported_filename(
-                filename
-            ):
+            if cls._is_supported_filename(filename):
                 return filename
 
         return None
@@ -406,32 +331,16 @@ class RetrievalService:
             "end_char",
         }
 
-        if not required_fields.issubset(
-            payload
-        ):
+        if not required_fields.issubset(payload):
             return None
 
         return RetrievedChunk(
-            document_id=str(
-                payload["document_id"]
-            ),
-            filename=str(
-                payload["filename"]
-            ),
-            content_type=str(
-                payload["content_type"]
-            ),
-            chunk_id=int(
-                payload["chunk_id"]
-            ),
-            text=str(
-                payload["text"]
-            ),
-            start_char=int(
-                payload["start_char"]
-            ),
-            end_char=int(
-                payload["end_char"]
-            ),
+            document_id=str(payload["document_id"]),
+            filename=str(payload["filename"]),
+            content_type=str(payload["content_type"]),
+            chunk_id=int(payload["chunk_id"]),
+            text=str(payload["text"]),
+            start_char=int(payload["start_char"]),
+            end_char=int(payload["end_char"]),
             score=score,
         )

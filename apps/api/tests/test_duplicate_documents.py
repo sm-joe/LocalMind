@@ -19,6 +19,15 @@ class FakeEmbeddingService:
             0.3,
         ]
 
+    def embed_many(
+        self,
+         texts: list[str],
+    ) -> list[list[float]]:
+        return [
+            self.embed(text)
+            for text in texts
+        ]
+
 
 class FakeVectorStore:
     def __init__(

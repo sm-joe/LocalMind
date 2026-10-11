@@ -1,3 +1,4 @@
+
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -14,12 +15,12 @@ def test_ingest_document(tmp_path: Path) -> None:
     )
 
     embedding_service = MagicMock()
-
-    embedding_service.embed.return_value = [
-        0.1,
-        0.2,
-        0.3,
-    ]
+    embedding_service.embed_many.side_effect = (
+        lambda texts: [
+            [0.1, 0.2, 0.3]
+            for _ in texts
+        ]
+    )
 
     vector_store = MagicMock()
 
@@ -39,27 +40,25 @@ def test_ingest_document(tmp_path: Path) -> None:
     assert result.chunks > 0
     assert result.document_id
 
+    embedding_service.embed_many.assert_called_once()
+
+    embedded_texts = (
+        embedding_service.embed_many.call_args.args[0]
+    )
+    assert len(embedded_texts) == result.chunks
+
     vector_store.ensure_collection.assert_called_once_with(
         vector_size=3
     )
-
     vector_store.upsert.assert_called_once()
 
-    points = (
-        vector_store.upsert.call_args.args[0]
-    )
+    points = vector_store.upsert.call_args.args[0]
 
     assert len(points) == result.chunks
 
     for point in points:
-        assert point.payload["document_id"] == (
-            result.document_id
-        )
-
-        assert point.payload["filename"] == (
-            "test.txt"
-        )
-
+        assert point.payload["document_id"] == result.document_id
+        assert point.payload["filename"] == "test.txt"
         assert point.payload["text"]
 
 
@@ -67,7 +66,6 @@ def test_ingest_rejects_empty_document(
     tmp_path: Path,
 ) -> None:
     file_path = tmp_path / "empty.txt"
-
     file_path.write_text(
         "",
         encoding="utf-8",
@@ -87,11 +85,9 @@ def test_ingest_rejects_empty_document(
             content_type="text/plain",
         )
     except ValueError as exc:
-        assert (
-            "no extractable text"
-            in str(exc)
-        )
+        assert "no extractable text" in str(exc)
     else:
-        raise AssertionError(
-            "Expected ValueError"
-        )
+        raise AssertionError("Expected ValueError")
+
+    embedding_service.embed_many.assert_not_called()
+    vector_store.upsert.assert_not_called()

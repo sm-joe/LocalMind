@@ -50,9 +50,7 @@ class IngestionService:
                 "Document file does not exist."
             )
 
-        document_hash = self._calculate_hash(
-            path
-        )
+        document_hash = self._calculate_hash(path)
 
         existing_document = (
             self.vector_store.find_document_by_hash(
@@ -66,16 +64,10 @@ class IngestionService:
             else path.name
         )
 
-        if self._is_existing_document(
-            existing_document
-        ):
+        if self._is_existing_document(existing_document):
             return IngestionResult(
-                document_id=existing_document[
-                    "document_id"
-                ],
-                filename=existing_document[
-                    "filename"
-                ],
+                document_id=existing_document["document_id"],
+                filename=existing_document["filename"],
                 chunks=0,
                 already_indexed=True,
             )
@@ -96,42 +88,61 @@ class IngestionService:
                 "Document produced no chunks."
             )
 
-        document_id = str(uuid.uuid4())
+        chunk_texts = [
+            chunk.text
+            for chunk in chunks
+        ]
 
-        first_embedding = (
-            self.embedding_service.embed(
-                chunks[0].text
-            )
+        # Prefer batch embedding when supported.
+        # Fall back to individual embeddings for compatible
+        # implementations and existing test doubles.
+        embed_many = getattr(
+            self.embedding_service,
+            "embed_many",
+            None,
         )
+
+        if callable(embed_many):
+            embeddings = embed_many(chunk_texts)
+        else:
+            embeddings = [
+                self.embedding_service.embed(text)
+                for text in chunk_texts
+            ]
+
+        if len(embeddings) != len(chunks):
+            raise RuntimeError(
+                "Embedding count does not match chunk count."
+            )
+
+        vector_size = len(embeddings[0])
+
+        if vector_size == 0:
+            raise RuntimeError(
+                "Embedding vectors must not be empty."
+            )
+
+        if any(
+            len(embedding) != vector_size
+            for embedding in embeddings
+        ):
+            raise RuntimeError(
+                "Embedding vectors have inconsistent dimensions."
+            )
 
         self.vector_store.ensure_collection(
-            vector_size=len(first_embedding)
+            vector_size=vector_size
         )
+
+        document_id = str(uuid.uuid4())
 
         points: list[models.PointStruct] = []
 
-        first_point = models.PointStruct(
-            id=str(uuid.uuid4()),
-            vector=first_embedding,
-            payload={
-                "document_id": document_id,
-                "document_hash": document_hash,
-                "filename": filename,
-                "content_type": parsed.content_type,
-                "chunk_id": chunks[0].chunk_id,
-                "text": chunks[0].text,
-                "start_char": chunks[0].start_char,
-                "end_char": chunks[0].end_char,
-            },
-        )
-
-        points.append(first_point)
-
-        for chunk in chunks[1:]:
-            embedding = self.embedding_service.embed(
-                chunk.text
-            )
-
+        for chunk, embedding in zip(
+            chunks,
+            embeddings,
+            strict=True,
+        ):
             points.append(
                 models.PointStruct(
                     id=str(uuid.uuid4()),
@@ -165,13 +176,8 @@ class IngestionService:
         if not isinstance(document, dict):
             return False
 
-        document_id = document.get(
-            "document_id"
-        )
-
-        filename = document.get(
-            "filename"
-        )
+        document_id = document.get("document_id")
+        filename = document.get("filename")
 
         return bool(
             isinstance(document_id, str)
