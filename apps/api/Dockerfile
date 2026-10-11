@@ -11,6 +11,7 @@ WORKDIR /app
 
 # System dependencies
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         libpcre2-8-0=10.46-1~deb13u3 \
     && rm -rf /var/lib/apt/lists/*

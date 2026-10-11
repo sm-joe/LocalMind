@@ -21,23 +21,29 @@ app.add_middleware(
         "http://127.0.0.1:3000",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=[
+        "GET",
+        "POST",
+        "DELETE",
+    ],
+    allow_headers=[
+        "Content-Type",
+    ],
 )
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Liveness check: confirms the API process can respond."""
+    """Liveness check; must not depend on external services."""
     return {"status": "ok"}
 
 
 @app.get("/ready")
-def ready() -> dict[str, object]:
-    """Readiness check: confirms required dependencies respond."""
+def ready() -> dict:
+    """Readiness check for Qdrant and Ollama."""
     settings = get_settings()
 
-    dependencies: dict[str, str] = {
+    dependencies = {
         "qdrant": "unavailable",
         "ollama": "unavailable",
     }
@@ -46,22 +52,20 @@ def ready() -> dict[str, object]:
         qdrant = QdrantClient(
             host=settings.qdrant_host,
             port=settings.qdrant_port,
-            timeout=3,
         )
         qdrant.get_collections()
         dependencies["qdrant"] = "ok"
     except Exception:
-        dependencies["qdrant"] = "unavailable"
+        pass
 
     try:
         ollama = OllamaClient(
             host=settings.ollama_base_url,
-            timeout=3,
         )
         ollama.list()
         dependencies["ollama"] = "ok"
     except Exception:
-        dependencies["ollama"] = "unavailable"
+        pass
 
     if any(
         status != "ok"
