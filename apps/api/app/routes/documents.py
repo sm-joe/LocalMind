@@ -53,6 +53,8 @@ UPLOAD_READ_CHUNK_SIZE = 1024 * 1024
 
 PDF_MAGIC = b"%PDF-"
 ZIP_MAGIC = b"PK\x03\x04"
+MAX_DOCX_ARCHIVE_ENTRIES = 1000
+MAX_DOCX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
 
 
 def create_vector_store() -> VectorStore:
@@ -164,15 +166,36 @@ def _validate_docx(path: Path) -> None:
             )
 
         with zipfile.ZipFile(path) as archive:
-            names = set(archive.namelist())
+            entries = archive.infolist()
 
-            if "[Content_Types].xml" not in names:
+            if len(entries) > MAX_DOCX_ARCHIVE_ENTRIES:
                 raise HTTPException(
                     status_code=400,
-                    detail="Uploaded file is not a valid DOCX.",
+                    detail="DOCX archive contains too many entries.",
                 )
 
-            if "word/document.xml" not in names:
+            total_uncompressed_bytes = sum(
+                entry.file_size for entry in entries
+            )
+
+            if (
+                total_uncompressed_bytes
+                > MAX_DOCX_UNCOMPRESSED_BYTES
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "DOCX archive expands beyond the "
+                        "allowed size."
+                    ),
+                )
+
+            names = {entry.filename for entry in entries}
+
+            if (
+                "[Content_Types].xml" not in names
+                or "word/document.xml" not in names
+            ):
                 raise HTTPException(
                     status_code=400,
                     detail="Uploaded file is not a valid DOCX.",
@@ -186,10 +209,10 @@ def _validate_docx(path: Path) -> None:
 
     except HTTPException:
         raise
-
     except (
         OSError,
         zipfile.BadZipFile,
+        RuntimeError,
     ) as exc:
         raise HTTPException(
             status_code=400,
@@ -342,6 +365,7 @@ async def upload_document(
         await file.close()
 
 
+
 @router.get(
     "",
     response_model=DocumentListResponse,
@@ -359,70 +383,51 @@ def list_documents() -> DocumentListResponse:
         )
 
         if not collection_exists:
-            return DocumentListResponse(
-                documents=[]
-            )
+            return DocumentListResponse(documents=[])
 
-        points = vector_store.list_points(
-            limit=1000,
-        )
+        points = vector_store.list_points(limit=1000)
 
-        documents: dict[str, DocumentResponse] = {}
+        document_metadata: dict[str, dict[str, str | int]] = {}
 
         for point in points:
             payload = point.payload or {}
+            raw_document_id = payload.get("document_id")
 
-            document_id = payload.get(
-                "document_id"
-            )
-
-            if not document_id:
+            if not raw_document_id:
                 continue
 
-            document_id = str(document_id)
+            document_id = str(raw_document_id)
 
-            if document_id not in documents:
-                documents[document_id] = (
-                    DocumentResponse(
-                        document_id=document_id,
-                        filename=str(
-                            payload.get(
-                                "filename",
-                                "unknown",
-                            )
-                        ),
-                        content_type=str(
-                            payload.get(
-                                "content_type",
-                                "application/octet-stream",
-                            )
-                        ),
-                        chunks=0,
-                    )
-                )
+            if document_id not in document_metadata:
+                document_metadata[document_id] = {
+                    "filename": str(payload.get("filename") or "unknown"),
+                    "content_type": str(
+                        payload.get("content_type")
+                        or "application/octet-stream"
+                    ),
+                    "chunks": 0,
+                }
 
-            documents[document_id] = (
-                documents[document_id].model_copy(
-                    update={
-                        "chunks": (
-                            documents[document_id].chunks
-                            + 1
-                        )
-                    }
-                )
+            document_metadata[document_id]["chunks"] += 1
+
+        documents = [
+            DocumentResponse(
+                document_id=document_id,
+                filename=str(metadata["filename"]),
+                content_type=str(metadata["content_type"]),
+                chunks=int(metadata["chunks"]),
             )
+            for document_id, metadata in document_metadata.items()
+        ]
 
-        return DocumentListResponse(
-            documents=list(
-                documents.values()
-            )
-        )
+        return DocumentListResponse(documents=documents)
 
     except Exception as exc:
         raise HTTPException(
             status_code=500,
             detail="Failed to list documents.",
         ) from exc
+
 
 
 @router.delete(

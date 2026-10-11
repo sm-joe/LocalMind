@@ -793,3 +793,95 @@ async def test_upload_rejects_docx_with_pdf_content(
     )
 
     assert fake_service.calls == []
+
+def test_docx_validation_rejects_excessive_archive_entries(
+    monkeypatch,
+    tmp_path,
+):
+    from types import SimpleNamespace
+
+    archive_path = tmp_path / "document.docx"
+    archive_path.write_bytes(documents.ZIP_MAGIC)
+
+    class FakeArchive:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def infolist(self):
+            return [
+                SimpleNamespace(
+                    filename=f"entry-{index}",
+                    file_size=1,
+                )
+                for index in range(
+                    documents.MAX_DOCX_ARCHIVE_ENTRIES + 1
+                )
+            ]
+
+    monkeypatch.setattr(
+        documents.zipfile,
+        "ZipFile",
+        lambda path: FakeArchive(),
+    )
+
+    with pytest.raises(documents.HTTPException) as exc_info:
+        documents._validate_docx(archive_path)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == (
+        "DOCX archive contains too many entries."
+    )
+
+
+def test_docx_validation_rejects_excessive_expanded_size(
+    monkeypatch,
+    tmp_path,
+):
+    from types import SimpleNamespace
+
+    archive_path = tmp_path / "document.docx"
+    archive_path.write_bytes(documents.ZIP_MAGIC)
+
+    class FakeArchive:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def infolist(self):
+            return [
+                SimpleNamespace(
+                    filename="[Content_Types].xml",
+                    file_size=1,
+                ),
+                SimpleNamespace(
+                    filename="word/document.xml",
+                    file_size=(
+                        documents.MAX_DOCX_UNCOMPRESSED_BYTES + 1
+                    ),
+                ),
+            ]
+
+        def testzip(self):
+            raise AssertionError(
+                "Archive integrity check must not run "
+                "before expanded-size validation."
+            )
+
+    monkeypatch.setattr(
+        documents.zipfile,
+        "ZipFile",
+        lambda path: FakeArchive(),
+    )
+
+    with pytest.raises(documents.HTTPException) as exc_info:
+        documents._validate_docx(archive_path)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == (
+        "DOCX archive expands beyond the allowed size."
+    )
