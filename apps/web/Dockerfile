@@ -30,7 +30,7 @@ ENV NODE_ENV=production \
 
 # Create non-root user and remove npm/npx from runtime image.
 RUN apt-get update && apt-get upgrade -y \
-    && apk add --no-cache zlib>=1.3.2-r1 \
+    && apt-get install -y --no-install-recommends zlib1g \
     && addgroup \
         --system \
         --gid 10001 \
