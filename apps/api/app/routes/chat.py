@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -13,6 +14,8 @@ router = APIRouter(
     prefix="/chat",
     tags=["chat"],
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ChatRequest(BaseModel):
@@ -170,9 +173,13 @@ def chat(
         )
 
     except ValueError as exc:
+        logger.warning(
+            "RAG chat rejected input; exception_type=%s",
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=400,
-            detail=str(exc),
+            detail="Invalid chat request.",
         ) from exc
 
     except Exception as exc:

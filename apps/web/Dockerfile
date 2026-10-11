@@ -29,21 +29,12 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1
 
 # Create non-root user and remove npm/npx from runtime image.
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends zlib1g \
-    && addgroup \
-        --system \
-        --gid 10001 \
-        localrag \
-    && adduser \
-        --system \
-        --uid 10001 \
-        --ingroup localrag \
-        --no-create-home \
-        localrag \
+RUN apk update && apk upgrade \
+    && apk add --no-cache 'zlib>=1.3.2-r1' \
+    && addgroup -S -g 10001 localrag \
+    && adduser -S -u 10001 -G localrag -H -D localrag \
     && rm -rf /usr/local/lib/node_modules/npm \
-    && rm -f /usr/local/bin/npm /usr/local/bin/npx \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 # Copy only the files required to run Next.js standalone output.
 COPY --from=builder --chown=10001:10001 /app/public ./public
