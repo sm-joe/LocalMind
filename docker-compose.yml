@@ -74,6 +74,8 @@ services:
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_MODELS: /opt/ollama-models
+      LLM_MODEL: ${LLM_MODEL:-llama3.2:3b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
     volumes:
       - ollama_models:/opt/ollama-models
     networks:
@@ -85,7 +87,7 @@ services:
         set -eu
 
         ollama serve >/tmp/ollama-init.log 2>&1 &
-        OLLAMA_PID=$!
+        OLLAMA_PID=$$!
 
         trap 'kill "$${OLLAMA_PID}" 2>/dev/null || true' EXIT
 
@@ -97,8 +99,45 @@ services:
           sleep 2
         done
 
-        ollama pull nomic-embed-text
-        ollama pull llama3.2:3b
+        ensure_model() {
+          requested_model="$$1"
+
+          case "$${requested_model}" in
+            *:*) expected_model="$${requested_model}" ;;
+            *) expected_model="$${requested_model}:latest" ;;
+          esac
+
+          if ollama list 2>/dev/null \
+            | awk 'NR > 1 {print $$1}' \
+            | grep -Fxq "$${expected_model}"; then
+            echo "Model already present: $${expected_model}"
+            return 0
+          fi
+
+          echo "Pulling missing model: $${requested_model}"
+          echo "Pulling missing model: $${requested_model}"
+        }
+
+        if [ "$${LLM_MODEL}" = "$${EMBEDDING_MODEL}" ]; then
+          ensure_model "$${LLM_MODEL}"
+        else
+          ensure_model "$${EMBEDDING_MODEL}" &
+          EMBEDDING_PULL_PID=$$!
+
+          ensure_model "$${LLM_MODEL}" &
+          LLM_PULL_PID=$$!
+
+          pull_status=0
+          wait "$${EMBEDDING_PULL_PID}" || pull_status=1
+          wait "$${LLM_PULL_PID}" || pull_status=1
+
+          if [ "$${pull_status}" -ne 0 ]; then
+            echo "One or more Ollama model pulls failed."
+            exit 1
+          fi
+        fi
+
+        echo "Ollama model initialization completed."
 
   ollama:
     build:
