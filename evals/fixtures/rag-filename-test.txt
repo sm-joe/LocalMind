@@ -1,0 +1,11 @@
+LocalRAG Baseline Evaluation Reference
+
+LocalRAG uses Qdrant for vector storage.
+
+Retrieval-augmented generation (RAG) combines document retrieval with a large language model.
+
+Before documents are stored in a vector database, they are parsed, split into chunks, converted into embeddings, and stored in the vector database.
+
+When a user asks a question, the question is converted into an embedding and the vector database is searched for semantically relevant document chunks.
+
+LocalRAG uses FastAPI for the backend, Next.js for the user interface, Ollama for local language models and embeddings, and Qdrant for vector storage.
