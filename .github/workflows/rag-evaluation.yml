@@ -38,16 +38,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    env:
+      COMPOSE: docker compose -f docker-compose.yml -f .github/ci-compose.yml
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
       - name: Start Qdrant and Ollama
         run: |
-          docker compose \
-            -f docker-compose.yml \
-            -f .github/ci-compose.yml \
-            up -d --wait qdrant ollama
+          ${{ 'docker compose -f docker-compose.yml -f .github/ci-compose.yml' }} up -d --wait qdrant ollama
 
       - name: Build and Start API
         run: |
@@ -56,16 +56,43 @@ jobs:
             -f .github/ci-compose.yml \
             up -d --build api
 
-      - name: Wait for API
+      - name: Wait for API Readiness
+        shell: bash
         run: |
-          curl \
-            --fail \
-            --silent \
-            --show-error \
-            --retry 30 \
-            --retry-connrefused \
-            --retry-delay 2 \
-            http://localhost:8000/health
+          set -uo pipefail
+
+          for attempt in $(seq 1 60); do
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              --connect-timeout 3 \
+              --max-time 5 \
+              http://localhost:8000/health \
+              > /tmp/localrag-health.json 2>/dev/null; then
+
+              echo "API health check succeeded."
+              cat /tmp/localrag-health.json
+              exit 0
+            fi
+
+            echo "API not ready (attempt ${attempt}/60)."
+            sleep 2
+          done
+
+          echo "::error::API did not become healthy within the readiness window."
+
+          docker compose \
+            -f docker-compose.yml \
+            -f .github/ci-compose.yml \
+            ps
+
+          docker compose \
+            -f docker-compose.yml \
+            -f .github/ci-compose.yml \
+            logs --no-color --tail=200 api qdrant ollama-init ollama
+
+          exit 1
 
       - name: Upload Evaluation Fixture
         shell: bash
@@ -77,6 +104,12 @@ jobs:
               --fail-with-body \
               --silent \
               --show-error \
+              --connect-timeout 10 \
+              --max-time 180 \
+              --retry 5 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --retry-max-time 30 \
               --form "file=@evals/fixtures/rag-filename-test.txt;type=text/plain" \
               http://localhost:8000/documents/upload
           )"
@@ -100,6 +133,13 @@ jobs:
           )
           ' <<< "$response"
 
+      - name: Run API Tests
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f .github/ci-compose.yml \
+            exec -T api pytest -q
+
       - name: Run RAG Baseline Evaluation
         run: python3 evals/run_evaluation.py
 
@@ -109,7 +149,12 @@ jobs:
           docker compose \
             -f docker-compose.yml \
             -f .github/ci-compose.yml \
-            logs --no-color api qdrant ollama-init ollama
+            ps
+
+          docker compose \
+            -f docker-compose.yml \
+            -f .github/ci-compose.yml \
+            logs --no-color --tail=300 api qdrant ollama-init ollama
 
       - name: Stop Services
         if: always()
