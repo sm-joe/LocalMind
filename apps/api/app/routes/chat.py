@@ -9,13 +9,12 @@ from app.services.rag import RAGService
 from app.services.retrieval import RetrievalService
 from app.services.vector_store import VectorStore
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/chat",
     tags=["chat"],
 )
-
-logger = logging.getLogger(__name__)
 
 
 class ChatRequest(BaseModel):
@@ -183,6 +182,10 @@ def chat(
         ) from exc
 
     except Exception as exc:
+        logger.exception(
+            "RAG chat failed; exception_type=%s",
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=500,
             detail="RAG chat failed.",

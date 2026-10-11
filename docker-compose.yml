@@ -115,7 +115,7 @@ services:
           fi
 
           echo "Pulling missing model: $${requested_model}"
-          echo "Pulling missing model: $${requested_model}"
+          ollama pull "$${requested_model}"
         }
 
         if [ "$${LLM_MODEL}" = "$${EMBEDDING_MODEL}" ]; then
@@ -147,7 +147,6 @@ services:
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_MODELS: /opt/ollama-models
-      OLLAMA_ORIGINS: "*"
     volumes:
       - ollama_models:/opt/ollama-models
     networks:
