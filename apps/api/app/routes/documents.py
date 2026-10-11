@@ -1,5 +1,6 @@
 import tempfile
 import zipfile
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -15,6 +16,8 @@ router = APIRouter(
     prefix="/documents",
     tags=["documents"],
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentUploadResponse(BaseModel):
@@ -351,6 +354,10 @@ async def upload_document(
         ) from exc
 
     except Exception as exc:
+        logger.error(
+            "Document ingestion failed; exception_type=%s",
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=500,
             detail="Document ingestion failed.",
@@ -423,6 +430,10 @@ def list_documents() -> DocumentListResponse:
         return DocumentListResponse(documents=documents)
 
     except Exception as exc:
+        logger.error(
+            "Document listing failed; exception_type=%s",
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=500,
             detail="Failed to list documents.",
@@ -456,6 +467,10 @@ def delete_document(
         )
 
     except Exception as exc:
+        logger.error(
+            "Document deletion failed; exception_type=%s",
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=500,
             detail="Failed to delete document.",
