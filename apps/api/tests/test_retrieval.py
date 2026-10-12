@@ -227,10 +227,44 @@ def test_normal_query_uses_unfiltered_semantic_search() -> None:
     embedding_service.embed.assert_called_once_with(question)
     vector_store.search.assert_called_once_with(
         vector=[0.1, 0.2, 0.3],
-        limit=5,
+        limit=20,
     )
     assert len(result.chunks) == 1
     assert result.chunks[0].filename == "guide.pdf"
+
+def test_semantic_search_overfetches_and_limits_final_chunks() -> None:
+    service, embedding_service, vector_store = create_service(
+        top_k=5,
+        score_threshold=0.45,
+    )
+    vector_store.search.return_value = [
+        create_point(
+            0.91 - index * 0.05,
+            chunk_id=index,
+            text=f"Relevant semantic passage {index}.",
+        )
+        for index in range(8)
+    ]
+
+    result = service.retrieve(
+        "What security recommendations does the document contain?"
+    )
+
+    embedding_service.embed.assert_called_once_with(
+        "What security recommendations does the document contain?"
+    )
+    vector_store.search.assert_called_once_with(
+        vector=[0.1, 0.2, 0.3],
+        limit=20,
+    )
+
+    assert result.diagnostics.candidate_count == 8
+    assert result.diagnostics.returned_count == 5
+    assert len(result.chunks) == 5
+    assert [chunk.score for chunk in result.chunks] == sorted(
+        (chunk.score for chunk in result.chunks),
+        reverse=True,
+    )
 
 
 def test_filename_search_rejects_invalid_limit() -> None:

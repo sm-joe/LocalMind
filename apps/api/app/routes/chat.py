@@ -87,7 +87,7 @@ def create_rag_service() -> RAGService:
         embedding_service=embedding_service,
         vector_store=vector_store,
         top_k=5,
-        score_threshold=0.45,
+        score_threshold=0.40,
     )
 
     llm_service = LLMService(
