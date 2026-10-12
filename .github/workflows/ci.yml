@@ -130,6 +130,7 @@ jobs:
 
     env:
       COMPOSE: docker compose -f docker-compose.yml -f .github/ci-compose.yml
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
 
     steps:
       - name: Checkout Repository
