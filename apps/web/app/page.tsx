@@ -89,6 +89,9 @@ export default function Home() {
   const fileInputRef =
     useRef<HTMLInputElement | null>(null);
 
+  const messagesEndRef =
+    useRef<HTMLDivElement | null>(null);
+
   async function loadDocuments() {
     setDocumentsLoading(true);
     setDocumentError(null);
@@ -125,6 +128,13 @@ export default function Home() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDocuments();
   }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
+  }, [messages, isLoading]);
 
   async function sendMessage(
     event: FormEvent<HTMLFormElement>
@@ -627,6 +637,26 @@ export default function Home() {
                           </div>
                         </div>
                       )}
+                    {message.role === "assistant" &&
+                      (!message.sources ||
+                        message.sources.length === 0) && (
+                        <div className="source-status" role="note">
+                          <span
+                            className="source-status-icon"
+                            aria-hidden="true"
+                          >
+                            i
+                          </span>
+
+                          <div>
+                            <strong>No citations returned</strong>
+                            <p>
+                              This response has no linked document evidence.
+                              Check the uploaded documents before relying on it.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                   </article>
                 ))}
 
@@ -636,13 +666,19 @@ export default function Home() {
                       LocalRAG
                     </div>
 
-                    <div className="typing-indicator">
+                    <div
+                      className="typing-indicator"
+                      role="status"
+                      aria-label="LocalRAG is generating a response"
+                    >
                       <span />
                       <span />
                       <span />
                     </div>
                   </article>
                 )}
+
+                <div ref={messagesEndRef} aria-hidden="true" />
               </div>
             )}
 
