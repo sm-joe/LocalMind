@@ -64,28 +64,24 @@ If LocalRAG is exposed beyond a trusted local environment, perform an additional
                          User
                            │
                            ▼
-                   ┌──────────────┐
-                   │  Next.js UI  │
-                   └──────┬───────┘
-                          │
-                          ▼
-                   ┌──────────────┐
-                   │  FastAPI API │
-                   └──────┬───────┘
-                          │
-             ┌────────────┴────────────┐
-             │                         │
-             ▼                         ▼
-      Document Ingestion          RAG / Chat
-             │                         │
-             ▼                         ▼
-      Validation / Parser       Retrieval Security
-             │                         │
-             ▼                         ▼
-          Qdrant ◄──────────── Prompt Construction
-                                       │
-                                       ▼
-                                    Ollama
+                   ┌────────────────┐
+                   │   Next.js UI   │
+                   │ Chat + history │
+                   └───────┬────────┘
+                           │
+                           ▼
+                   ┌────────────────┐
+                   │   FastAPI API  │
+                   └───┬────┬────┬──┘
+                       │    │    │
+             ┌─────────┘    │    └───────────┐
+             ▼              ▼                ▼
+       Document/RAG     PostgreSQL         Ollama
+        pipeline       Conversations,   Local LLM and
+             │          messages and     embeddings
+             ▼           citations          ▲
+          Qdrant                            │
+       Chunks/embeddings ── retrieved context ─┘
 ```
 
 Security controls are applied at each stage rather than relying on a single security mechanism.
@@ -321,6 +317,10 @@ If the filename does not exist, normal semantic retrieval is used instead.
 
 # 8. Citation Security
 
+Conversation history persists citation metadata with assistant messages. The frontend evidence panel must render source references returned by the API and must not manufacture citations or passages. Citation persistence does not independently validate the truth of a model answer; sources must be checked against the retrieved document context.
+
+When clients retry a chat request, the API supports a stable `Idempotency-Key` together with `conversation_id` so a completed request can be returned without generating a duplicate answer. Treat idempotency keys as request identifiers, not as authentication tokens.
+
 Retrieved chunks receive controlled citation identifiers:
 
 ```text
@@ -403,7 +403,7 @@ The application is therefore bound to the local host rather than all host interf
 
 ## Qdrant
 
-Qdrant is not directly published to the host.
+PostgreSQL and Qdrant are not directly published to the host.
 
 The API communicates with Qdrant through the internal Docker backend network.
 
@@ -424,9 +424,9 @@ Host
                             │
                             ▼
                     Internal backend
-                       │         │
-                       ▼         ▼
-                    Qdrant     Ollama
+                   ┌─────┼─────┐
+                   ▼     ▼     ▼
+             PostgreSQL Qdrant Ollama
 ```
 
 This reduces direct host exposure of infrastructure services.
@@ -437,15 +437,11 @@ This reduces direct host exposure of infrastructure services.
 
 LocalRAG does not require cloud credentials for normal local operation.
 
-Configuration is supplied through environment variables.
+Configuration is supplied through environment variables. PostgreSQL requires `POSTGRES_PASSWORD` in the repository-root `.env` file for local Compose runs. Use `.env.example` only as a template and replace its placeholder locally.
 
-The intended pattern is:
+Keep `.env` out of source control. For GitHub Actions, provide the password through a repository secret and map it into the workflow environment only for jobs that need it. Never hard-code secrets into Compose or workflow YAML.
 
-```text
-.env.example
-```
-
-for documented examples, while local secret-bearing configuration remains outside source control.
+The frontend's conversation-management features do not add authentication: the application remains single-user and intended for trusted local use.
 
 ## Never commit
 
@@ -463,7 +459,7 @@ for documented examples, while local secret-bearing configuration remains outsid
 
 Application dependencies are pinned in the project dependency files.
 
-Dependency updates should be tested rather than applied blindly because compatibility is part of the security baseline.
+Dependency updates should be tested rather than applied blindly because compatibility is part of the security baseline. Review `npm audit --omit=dev` and the full `npm audit` separately: a clean production-only audit does not mean development tooling has no findings. Do not use `npm audit fix --force` when it proposes a breaking Next.js/ESLint downgrade merely to silence a transitive development dependency finding; verify a compatible upstream fix first and document unresolved findings.
 
 Security updates should preserve:
 
@@ -560,6 +556,10 @@ Security-sensitive behavior is covered by automated tests.
 
 Coverage includes:
 
+- PostgreSQL readiness and Alembic migration state
+- Conversation creation, listing, and message persistence
+- Conversation rename, archive, and deletion behavior
+- Idempotent chat retries and persisted citations
 - Upload validation
 - Empty uploads
 - Filename validation
@@ -616,18 +616,17 @@ Security and retrieval changes should not silently degrade this baseline.
 
 # 17. Data Persistence
 
-LocalRAG persists:
+LocalRAG uses separate persistence locations for distinct data types:
 
-```text
-data/qdrant
-data/ollama
-```
+| Storage | Purpose | Handling |
+|---|---|---|
+| `postgres_data` Docker volume | Conversation metadata, messages, message status, and citation metadata | Sensitive; back up and protect |
+| `data/qdrant` (or configured Qdrant volume) | Document chunks, embeddings, and vector-index data | Treat as potentially sensitive |
+| `data/ollama` (or configured Ollama volume) | Downloaded local model artifacts | Can be large; protect and do not commit |
 
-These locations contain application data and downloaded model data.
+The API uses Alembic migrations to manage the PostgreSQL schema. Qdrant remains the vector store and is not the source of truth for conversation history.
 
-Treat them as potentially sensitive because uploaded documents and model-related data may be stored there.
-
-> Do not publish or commit local application data to source control.
+> Do not publish or commit local application data, model artifacts, database volumes, or `.env` files. `docker compose down -v` removes named volumes and therefore deletes persisted conversations.
 
 ---
 
@@ -658,6 +657,7 @@ It does **not** currently provide:
 - User authentication
 - Authorization
 - Multi-user isolation
+- Conversation ownership enforcement (ownership metadata alone is not access control)
 - Tenant isolation
 - Per-document access control
 - Enterprise identity integration
@@ -747,6 +747,9 @@ Do not include credentials, secrets, or private personal information in a report
 | Trivy configuration scanning | Yes |
 | Trivy container scanning | Yes |
 | Security regression tests | Yes |
+| PostgreSQL conversation persistence | Yes |
+| Versioned Alembic migrations | Yes |
+| Idempotent chat retries | Yes |
 | RAG evaluation baseline | Yes |
 
 ---

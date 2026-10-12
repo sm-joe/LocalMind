@@ -24,6 +24,16 @@
 
 ---
 
+## UI preview
+
+The preview below illustrates the approved dark Slate direction: a three-panel workspace, conversation and document management on the left, the active RAG conversation in the center, and retrieved evidence/citations on the right.
+
+> **Illustrative UI preview:** this is a visual mockup, not a screenshot captured from a running LocalRAG instance. Replace it with a fresh application screenshot when capturing the frozen release.
+
+![LocalRAG dark Slate UI preview](docs/images/localrag-ui-preview.png)
+
+---
+
 ## What is LocalRAG?
 
 **LocalRAG** is a Docker-first local RAG chatbot for learning, experimenting, and working with private documents without sending document content to a hosted LLM provider.
@@ -68,6 +78,20 @@ LocalRAG focuses on those boundaries:
 ---
 
 ## Highlights
+
+### Persistent conversations and history (Phase A–C)
+
+The application now includes PostgreSQL-backed conversation persistence alongside the existing document RAG workflow.
+
+- PostgreSQL is the system of record for conversation and message history.
+- Alembic provides versioned database migrations.
+- Conversations can be listed and restored after reload.
+- Conversation management includes rename, archive, and delete.
+- Chat messages retain their status and associated citation metadata.
+- Chat requests can use `conversation_id` and an `Idempotency-Key` to make retries safe.
+- Qdrant remains dedicated to document chunks, embeddings, and similarity retrieval; it is not the conversation database.
+
+The current deployment remains a local, single-user application. Conversation ownership metadata does not provide authentication or authorization.
 
 ### Local by design
 
@@ -126,28 +150,36 @@ Ollama model provisioning is separated from the runtime container. Models are do
 ## Architecture
 
 ```text
-                         ┌──────────────────────┐
-                         │       Browser        │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │   Next.js / React    │
-                         │      Web UI :3000    │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │     FastAPI API      │
-                         │       :8000          │
-                         └───────┬───────┬──────┘
-                                 │       │
-                   ┌─────────────┘       └─────────────┐
-                   ▼                                   ▼
-          ┌──────────────────┐                ┌──────────────────┐
-          │      Qdrant      │                │      Ollama      │
-          │   Vector Store   │                │ LLM + Embeddings │
-          └──────────────────┘                └──────────────────┘
+                         ┌─────────────────────────┐
+                         │         Browser         │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │   Next.js / React UI    │
+                         │        :3000            │
+                         │ Chat, documents, history│
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │       FastAPI API       │
+                         │          :8000          │
+                         └──────┬────────┬─────────┘
+                                │        │
+                ┌───────────────┘        └────────────────┐
+                ▼                                         ▼
+       ┌────────────────────┐                    ┌────────────────────┐
+       │     PostgreSQL     │                    │       Qdrant       │
+       │ Conversations,     │                    │ Document chunks,   │
+       │ messages, status,  │                    │ embeddings, search │
+       │ citation metadata  │                    └────────────────────┘
+       └────────────────────┘                              │
+                                                           ▼
+                                                 ┌────────────────────┐
+                                                 │       Ollama       │
+                                                 │ Local LLM + embed  │
+                                                 └────────────────────┘
 ```
 
 ### RAG flow
@@ -212,9 +244,10 @@ Host
  │
  └── 127.0.0.1:8000 ──► API
                            │
-                           ├──► Qdrant
+                           ├──► PostgreSQL (conversation history)
+                           ├──► Qdrant (document vectors)
                            │
-                           └──► Ollama
+                           └──► Ollama (LLM + embeddings)
                                   │
                            shared model volume
                                   │
@@ -238,6 +271,7 @@ frontend
 backend (internal: true)
    │
    ├── API
+   ├── PostgreSQL
    ├── Qdrant
    └── Ollama
 
@@ -246,7 +280,7 @@ ollama-egress
    └── ollama-init
 ```
 
-Qdrant and Ollama are not published directly to the host in the production Compose configuration.
+PostgreSQL, Qdrant, and Ollama are not published directly to the host in the production Compose configuration.
 
 The runtime Ollama container does not require Internet access. Only `ollama-init` receives external network access for model provisioning.
 
@@ -287,7 +321,17 @@ git clone https://github.com/sm-joe/localrag.git
 cd localrag
 ```
 
-## 2. Build
+## 2. Configure environment
+
+Create a local environment file if one does not already exist:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Set a strong, unique `POSTGRES_PASSWORD` in the repository-root `.env` file before starting the stack. Keep `.env` private and out of Git; do not put real secrets in `.env.example`.
+
+## 3. Build
 
 ```powershell
 docker compose build
@@ -295,28 +339,25 @@ docker compose build
 
 The build creates the application and Ollama images without downloading model artifacts. Model provisioning happens during first startup through the `ollama-init` service. No manual model download is required.
 
-## 3. Start
+## 4. Start
 
 ```powershell
 docker compose up -d
 ```
 
-## 4. Check services
+## 5. Check services
 
 ```powershell
 docker compose ps
 ```
 
-You should see:
+You should see the web, API, PostgreSQL, Qdrant, and Ollama services (plus the one-shot model provisioning service when it runs):
 
-```text
-localrag-web
-localrag-api
-localrag-qdrant
-localrag-ollama
+```powershell
+docker compose ps
 ```
 
-## 5. Open the application
+## 6. Open the application
 
 Open:
 
@@ -1081,6 +1122,11 @@ Avoid introducing infrastructure that does not improve the actual local use case
 | Area | Status |
 |---|---|
 | Next.js Web UI | Complete |
+| PostgreSQL conversation persistence | Complete |
+| Alembic schema migrations | Complete |
+| Conversation API and idempotent chat retries | Complete |
+| Conversation history, restore, rename, archive, delete | Complete |
+| Slate UI refinements | Frozen baseline |
 | FastAPI API | Complete |
 | Docker Compose runtime | Complete |
 | Qdrant integration | Complete |
@@ -1133,41 +1179,45 @@ If LocalRAG is useful to you, consider giving the repository a ⭐.
 
 # Persistent Conversation History
 
-LocalRAG stores conversation history in PostgreSQL. Qdrant remains the vector store for document chunks and embeddings; it is not used as the system of record for chat messages.
+PostgreSQL is the system of record for chat conversations and messages. Qdrant remains responsible for document chunks, embeddings, and similarity search; it is not used to store chat history.
 
-## Data persisted
+## What is persisted
 
-- Conversation title, archive state, and timestamps
+- Conversation title, archive state, ownership metadata, and timestamps
 - User questions and assistant answers
 - Message status (`pending`, `complete`, or `failed`)
-- Citation metadata associated with each assistant answer
-- Retrieval diagnostics and generation performance metadata
+- Citation metadata associated with assistant responses
+- Retrieval diagnostics and generation-performance metadata, where provided by the API
 
-The API applies versioned Alembic migrations before starting. PostgreSQL data is stored in the `postgres_data` Docker volume.
+The API uses versioned Alembic migrations. PostgreSQL data is stored in the `postgres_data` Docker volume.
 
 ## Configure PostgreSQL
 
-Set `POSTGRES_PASSWORD` in the repository-root `.env` file. Do not use the example placeholder in a real deployment. If `.env` does not exist, copy `.env.example` to `.env`, then replace the placeholder with a strong random password.
+Set `POSTGRES_PASSWORD` in the repository-root `.env` file. If `.env` does not exist, copy `.env.example` to `.env` and replace the placeholder with a strong random password.
 
-Do not commit `.env` or share it in repository archives.
+Never commit `.env` or include it in repository archives. GitHub Actions workflows that start Compose must receive the required password through a repository secret and workflow environment variable; never hard-code the password in workflow YAML.
 
 ## Conversation API
 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `POST` | `/conversations` | Create a conversation |
-| `GET` | `/conversations` | List conversations, with cursor pagination |
+| `GET` | `/conversations` | List conversations with cursor pagination |
 | `GET` | `/conversations/{id}` | Read conversation metadata |
 | `GET` | `/conversations/{id}/messages` | Read persisted messages and citations |
 | `PATCH` | `/conversations/{id}` | Rename or archive a conversation |
 | `DELETE` | `/conversations/{id}` | Delete a conversation and its messages |
 | `POST` | `/chat` | Run RAG; pass `conversation_id` to persist the exchange |
 
-For retry-safe chat requests, send a stable `Idempotency-Key` header together with `conversation_id`. Reusing a completed key returns the stored response instead of generating a duplicate answer.
+For retry-safe chat requests, send a stable `Idempotency-Key` header with `conversation_id`. Reusing a completed key returns the stored response rather than generating a duplicate answer.
 
-The current deployment is a local, single-user application. The ownership field prepares the data model for user scoping, but it is not a substitute for authentication. Do not expose the API to untrusted networks or treat it as a multi-user service until authentication and authorization are implemented.
+The frontend history/sidebar is integrated with the existing document upload and RAG chat workflows. The evidence panel must display citations returned by the API; it must not invent source passages.
+
+The deployment remains local and single-user. Ownership metadata is not authentication, authorization, or tenant isolation. Do not expose the API to untrusted networks until those controls are implemented.
 
 ## Persistence validation
+
+Run from the repository root:
 
 ```powershell
 docker compose up -d --build
@@ -1177,4 +1227,8 @@ docker compose exec api alembic current
 docker compose exec api pytest -q
 ```
 
-Do not use `docker compose down -v` when you want to preserve conversations: that command deletes named volumes, including `postgres_data`.
+Do not run `docker compose down -v` if you want to preserve conversations: it removes named volumes, including `postgres_data`.
+
+## Release status
+
+Phases A–C are frozen as the current baseline: PostgreSQL persistence and migrations, conversation APIs and retry safety, and frontend conversation-history management integrated with existing RAG/document workflows. Treat future changes as new work and preserve this baseline unless a change is explicitly planned and tested.
