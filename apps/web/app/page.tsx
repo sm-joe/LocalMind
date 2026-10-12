@@ -125,6 +125,7 @@ export default function Home() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [evidencePanelCollapsed, setEvidencePanelCollapsed] = useState(false);
   const [conversationActionId, setConversationActionId] = useState<string | null>(null);
 
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -278,7 +279,6 @@ export default function Home() {
     initialLoadStartedRef.current = true;
 
     // Initial network requests intentionally populate component state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDocuments();
     void (async () => {
       const items = await loadConversations();
@@ -562,6 +562,10 @@ export default function Home() {
 
   const activeConversation = conversations.find((item) => item.id === activeConversationId);
   const visibleConversations = conversations.filter((item) => item.is_archived === showArchived);
+  const evidenceSources = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && (message.sources?.length ?? 0) > 0)
+    ?.sources ?? [];
   const conversationControlsDisabled = isLoading || messagesLoading || conversationActionId !== null;
 
   return (
@@ -571,7 +575,7 @@ export default function Home() {
           <div>
             <p className="eyebrow">LOCALRAG</p>
             <h1>Ask your documents.</h1>
-            <p className="subtitle">Private, local document retrieval powered by Ollama and Qdrant.</p>
+            <p className="subtitle">Private, Local Document Retrieval Powered by Ollama and Qdrant.</p>
           </div>
           <div className="status-pill"><span className="status-dot" />Local</div>
         </header>
@@ -822,6 +826,47 @@ export default function Home() {
             </form>
             <p className="composer-hint">Press Enter to send · Shift + Enter for a new line</p>
           </section>
+
+          <aside className={`evidence-panel${evidencePanelCollapsed ? " evidence-panel-collapsed" : ""}`} aria-label="Retrieved evidence">
+            <div className="evidence-panel-header">
+              <div>
+                <span className="chat-context-label">CURRENT EVIDENCE</span>
+                <h2>Retrieved sources</h2>
+                <p>{evidenceSources.length} {evidenceSources.length === 1 ? "source" : "sources"} from the latest answer</p>
+              </div>
+              <button
+                type="button"
+                className="evidence-toggle"
+                onClick={() => setEvidencePanelCollapsed((current) => !current)}
+                aria-expanded={!evidencePanelCollapsed}
+                aria-label={evidencePanelCollapsed ? "Expand retrieved sources panel" : "Collapse retrieved sources panel"}
+                title={evidencePanelCollapsed ? "Expand sources" : "Collapse sources"}
+              >
+                {evidencePanelCollapsed ? "›" : "‹"}
+              </button>
+            </div>
+            {!evidencePanelCollapsed && (
+              <div className="evidence-list">
+                {evidenceSources.length === 0 ? (
+                  <div className="evidence-empty">
+                    <span className="evidence-empty-mark">↗</span>
+                    <strong>No retrieved sources yet</strong>
+                    <p>Sources returned with an answer will appear here.</p>
+                  </div>
+                ) : evidenceSources.map((source, index) => (
+                  <article className="evidence-card" key={`${source.document_id}-${source.chunk_id}-${index}`}>
+                    <div className="evidence-card-top">
+                      <span className="evidence-document-mark">PDF</span>
+                      <span className="evidence-score">{source.score.toFixed(2)}</span>
+                    </div>
+                    <strong className="evidence-filename" title={source.filename}>{source.filename}</strong>
+                    <p className="evidence-citation">{source.citation}</p>
+                    <div className="evidence-card-footer">Chunk {source.chunk_id}</div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </aside>
         </div>
       </section>
     </main>
