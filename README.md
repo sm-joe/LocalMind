@@ -1128,3 +1128,53 @@ See [`LICENSE`](LICENSE) for the project license.
 Built as a practical exploration of local LLMs, retrieval, document processing, application security, and DevSecOps.
 
 If LocalRAG is useful to you, consider giving the repository a ⭐.
+
+---
+
+# Persistent Conversation History
+
+LocalRAG stores conversation history in PostgreSQL. Qdrant remains the vector store for document chunks and embeddings; it is not used as the system of record for chat messages.
+
+## Data persisted
+
+- Conversation title, archive state, and timestamps
+- User questions and assistant answers
+- Message status (`pending`, `complete`, or `failed`)
+- Citation metadata associated with each assistant answer
+- Retrieval diagnostics and generation performance metadata
+
+The API applies versioned Alembic migrations before starting. PostgreSQL data is stored in the `postgres_data` Docker volume.
+
+## Configure PostgreSQL
+
+Set `POSTGRES_PASSWORD` in the repository-root `.env` file. Do not use the example placeholder in a real deployment. If `.env` does not exist, copy `.env.example` to `.env`, then replace the placeholder with a strong random password.
+
+Do not commit `.env` or share it in repository archives.
+
+## Conversation API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/conversations` | Create a conversation |
+| `GET` | `/conversations` | List conversations, with cursor pagination |
+| `GET` | `/conversations/{id}` | Read conversation metadata |
+| `GET` | `/conversations/{id}/messages` | Read persisted messages and citations |
+| `PATCH` | `/conversations/{id}` | Rename or archive a conversation |
+| `DELETE` | `/conversations/{id}` | Delete a conversation and its messages |
+| `POST` | `/chat` | Run RAG; pass `conversation_id` to persist the exchange |
+
+For retry-safe chat requests, send a stable `Idempotency-Key` header together with `conversation_id`. Reusing a completed key returns the stored response instead of generating a duplicate answer.
+
+The current deployment is a local, single-user application. The ownership field prepares the data model for user scoping, but it is not a substitute for authentication. Do not expose the API to untrusted networks or treat it as a multi-user service until authentication and authorization are implemented.
+
+## Persistence validation
+
+```powershell
+docker compose up -d --build
+docker compose ps
+docker compose logs --no-color api
+docker compose exec api alembic current
+docker compose exec api pytest -q
+```
+
+Do not use `docker compose down -v` when you want to preserve conversations: that command deletes named volumes, including `postgres_data`.

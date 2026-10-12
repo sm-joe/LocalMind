@@ -11,6 +11,15 @@ services:
       LLM_PROVIDER: ollama
       LLM_MODEL: ${LLM_MODEL:-llama3.2:3b}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: localrag
+      DATABASE_USER: localrag
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the repository-root .env file}
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
       - "127.0.0.1:8000:8000"
     security_opt:
@@ -26,6 +35,8 @@ services:
       qdrant:
         condition: service_healthy
       ollama:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
 
   web:
@@ -45,6 +56,29 @@ services:
       - frontend
     depends_on:
       - api
+
+  postgres:
+    image: postgres:17.11
+    container_name: localrag-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: localrag
+      POSTGRES_USER: localrag
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the repository-root .env file}
+    volumes:
+      - postgres_data_fresh:/var/lib/postgresql/data
+    networks:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   qdrant:
     image: qdrant/qdrant:v1.19.1
@@ -182,3 +216,7 @@ networks:
 volumes:
   qdrant_data:
   ollama_models:
+  postgres_data:
+    name: localrag_postgres_data_recovered
+  postgres_data_fresh:
+    name: localrag_postgres_fresh_20261012_185803_386b33

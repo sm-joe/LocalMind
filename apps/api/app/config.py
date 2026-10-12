@@ -17,8 +17,14 @@ class Settings(BaseSettings):
 
     llm_provider: str = "ollama"
     llm_model: str = "llama3.2:3b"
-
     embedding_model: str = "nomic-embed-text"
+
+    database_url: str | None = None
+    database_host: str = "postgres"
+    database_port: int = 5432
+    database_name: str = "localrag"
+    database_user: str = "localrag"
+    database_password: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

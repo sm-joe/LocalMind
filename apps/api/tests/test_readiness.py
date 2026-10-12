@@ -27,6 +27,7 @@ class FakeOllamaClient:
 
 
 def configure_settings(monkeypatch):
+    monkeypatch.setattr(main, "check_database", lambda: True)
     monkeypatch.setattr(
         main,
         "get_settings",
@@ -88,6 +89,7 @@ def test_ready_when_dependencies_and_models_are_available(
     assert response.json() == {
         "status": "ready",
         "dependencies": {
+            "database": "ok",
             "qdrant": "ok",
             "ollama": "ok",
             "llm_model": "ok",
@@ -125,6 +127,7 @@ def test_ready_returns_503_when_qdrant_is_unavailable(
     assert response.json()["detail"] == {
         "status": "not_ready",
         "dependencies": {
+            "database": "ok",
             "qdrant": "unavailable",
             "ollama": "ok",
             "llm_model": "ok",
@@ -162,6 +165,7 @@ def test_ready_returns_503_when_ollama_is_unavailable(
     assert response.json()["detail"] == {
         "status": "not_ready",
         "dependencies": {
+            "database": "ok",
             "qdrant": "ok",
             "ollama": "unavailable",
             "llm_model": "unavailable",
@@ -202,6 +206,7 @@ def test_ready_returns_503_when_llm_model_is_missing(
     assert response.json()["detail"] == {
         "status": "not_ready",
         "dependencies": {
+            "database": "ok",
             "qdrant": "ok",
             "ollama": "ok",
             "llm_model": "missing",
@@ -240,6 +245,7 @@ def test_ready_returns_503_when_embedding_model_is_missing(
     assert response.json()["detail"] == {
         "status": "not_ready",
         "dependencies": {
+            "database": "ok",
             "qdrant": "ok",
             "ollama": "ok",
             "llm_model": "ok",
@@ -260,3 +266,12 @@ def test_ready_does_not_match_different_model_tags():
         "llama3.2:3b",
         {"llama3.2:1b"},
     )
+
+def test_ready_returns_503_when_database_is_unavailable(monkeypatch):
+    configure_available_dependencies(monkeypatch)
+    monkeypatch.setattr(main, "check_database", lambda: False)
+
+    response = TestClient(main.app).get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["dependencies"]["database"] == "unavailable"

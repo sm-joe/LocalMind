@@ -39,7 +39,7 @@ def test_cors_rejects_unconfigured_http_method():
         "/chat",
         headers={
             "Origin": "http://localhost:3000",
-            "Access-Control-Request-Method": "PATCH",
+            "Access-Control-Request-Method": "TRACE",
         },
     )
 
@@ -57,3 +57,18 @@ def test_cors_rejects_unconfigured_request_header():
     )
 
     assert response.status_code == 400
+
+def test_cors_allows_conversation_patch_and_idempotency_header():
+    response = client.options(
+        "/conversations/00000000-0000-0000-0000-000000000000",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "PATCH",
+            "Access-Control-Request-Headers": "content-type,idempotency-key",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "http://localhost:3000"
+    )

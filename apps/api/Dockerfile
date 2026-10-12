@@ -35,6 +35,8 @@ RUN groupadd --gid 10001 localrag \
 # invalidate the dependency layer.
 COPY --chown=10001:10001 app ./app
 COPY --chown=10001:10001 tests ./tests
+COPY --chown=10001:10001 migrations ./migrations
+COPY --chown=10001:10001 alembic.ini ./alembic.ini
 
 # Remove pip from the final image.
 RUN rm -rf /usr/local/lib/python3.14/site-packages/pip

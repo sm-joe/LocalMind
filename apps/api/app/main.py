@@ -4,13 +4,15 @@ from ollama import Client as OllamaClient
 from qdrant_client import QdrantClient
 
 from app.config import get_settings
+from app.db import check_database
 from app.routes.chat import router as chat_router
+from app.routes.conversations import router as conversations_router
 from app.routes.documents import router as documents_router
 
 
 app = FastAPI(
     title="LocalRAG API",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -23,10 +25,12 @@ app.add_middleware(
     allow_methods=[
         "GET",
         "POST",
+        "PATCH",
         "DELETE",
     ],
     allow_headers=[
         "Content-Type",
+        "Idempotency-Key",
     ],
 )
 
@@ -70,10 +74,11 @@ def health() -> dict[str, str]:
 
 @app.get("/ready")
 def ready() -> dict:
-    """Check Qdrant, Ollama, and both configured Ollama models."""
+    """Check the database, Qdrant, Ollama, and configured models."""
     settings = get_settings()
 
     dependencies = {
+        "database": "ok" if check_database() else "unavailable",
         "qdrant": "unavailable",
         "ollama": "unavailable",
         "llm_model": "unavailable",
@@ -98,9 +103,7 @@ def ready() -> dict:
         model_entries = getattr(response, "models", None)
 
         if model_entries is None:
-            raise RuntimeError(
-                "Ollama returned no model list."
-            )
+            raise RuntimeError("Ollama returned no model list.")
 
         available_models = {
             name
@@ -112,32 +115,21 @@ def ready() -> dict:
         }
 
         dependencies["ollama"] = "ok"
-
         dependencies["llm_model"] = (
             "ok"
-            if _model_is_available(
-                settings.llm_model,
-                available_models,
-            )
+            if _model_is_available(settings.llm_model, available_models)
             else "missing"
         )
-
         dependencies["embedding_model"] = (
             "ok"
-            if _model_is_available(
-                settings.embedding_model,
-                available_models,
-            )
+            if _model_is_available(settings.embedding_model, available_models)
             else "missing"
         )
     except Exception:
         # Ollama is unavailable, so its models cannot be verified.
         pass
 
-    if any(
-        status != "ok"
-        for status in dependencies.values()
-    ):
+    if any(status != "ok" for status in dependencies.values()):
         raise HTTPException(
             status_code=503,
             detail={
@@ -146,11 +138,9 @@ def ready() -> dict:
             },
         )
 
-    return {
-        "status": "ready",
-        "dependencies": dependencies,
-    }
+    return {"status": "ready", "dependencies": dependencies}
 
 
 app.include_router(documents_router)
 app.include_router(chat_router)
+app.include_router(conversations_router)
