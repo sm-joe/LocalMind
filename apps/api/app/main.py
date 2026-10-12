@@ -13,7 +13,6 @@ app = FastAPI(
     version="0.1.0",
 )
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -32,6 +31,37 @@ app.add_middleware(
 )
 
 
+def _model_identifier(model: object) -> str:
+    """Return a model name from an Ollama model-list entry."""
+    if isinstance(model, dict):
+        value = model.get("model") or model.get("name")
+    else:
+        value = getattr(model, "model", None) or getattr(
+            model, "name", None
+        )
+
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _model_is_available(
+    configured_model: str,
+    available_models: set[str],
+) -> bool:
+    """Match a configured model, treating an omitted tag as :latest."""
+    requested = configured_model.strip()
+
+    if not requested:
+        return False
+
+    if requested in available_models:
+        return True
+
+    if ":" not in requested:
+        return f"{requested}:latest" in available_models
+
+    return False
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Liveness check; must not depend on external services."""
@@ -40,12 +70,14 @@ def health() -> dict[str, str]:
 
 @app.get("/ready")
 def ready() -> dict:
-    """Readiness check for Qdrant and Ollama."""
+    """Check Qdrant, Ollama, and both configured Ollama models."""
     settings = get_settings()
 
     dependencies = {
         "qdrant": "unavailable",
         "ollama": "unavailable",
+        "llm_model": "unavailable",
+        "embedding_model": "unavailable",
     }
 
     try:
@@ -62,9 +94,44 @@ def ready() -> dict:
         ollama = OllamaClient(
             host=settings.ollama_base_url,
         )
-        ollama.list()
+        response = ollama.list()
+        model_entries = getattr(response, "models", None)
+
+        if model_entries is None:
+            raise RuntimeError(
+                "Ollama returned no model list."
+            )
+
+        available_models = {
+            name
+            for name in (
+                _model_identifier(model)
+                for model in model_entries
+            )
+            if name
+        }
+
         dependencies["ollama"] = "ok"
+
+        dependencies["llm_model"] = (
+            "ok"
+            if _model_is_available(
+                settings.llm_model,
+                available_models,
+            )
+            else "missing"
+        )
+
+        dependencies["embedding_model"] = (
+            "ok"
+            if _model_is_available(
+                settings.embedding_model,
+                available_models,
+            )
+            else "missing"
+        )
     except Exception:
+        # Ollama is unavailable, so its models cannot be verified.
         pass
 
     if any(

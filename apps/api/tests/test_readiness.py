@@ -18,7 +18,12 @@ class FakeOllamaClient:
         self.kwargs = kwargs
 
     def list(self):
-        return SimpleNamespace(models=[])
+        return SimpleNamespace(
+            models=[
+                SimpleNamespace(model="llama3.2:3b"),
+                SimpleNamespace(model="nomic-embed-text:latest"),
+            ]
+        )
 
 
 def configure_settings(monkeypatch):
@@ -29,7 +34,23 @@ def configure_settings(monkeypatch):
             qdrant_host="qdrant",
             qdrant_port=6333,
             ollama_base_url="http://ollama:11434",
+            llm_model="llama3.2:3b",
+            embedding_model="nomic-embed-text",
         ),
+    )
+
+
+def configure_available_dependencies(monkeypatch):
+    configure_settings(monkeypatch)
+    monkeypatch.setattr(
+        main,
+        "QdrantClient",
+        FakeQdrantClient,
+    )
+    monkeypatch.setattr(
+        main,
+        "OllamaClient",
+        FakeOllamaClient,
     )
 
 
@@ -56,19 +77,10 @@ def test_health_does_not_depend_on_backends(monkeypatch):
     assert response.json() == {"status": "ok"}
 
 
-def test_ready_when_both_dependencies_respond(monkeypatch):
-    configure_settings(monkeypatch)
-
-    monkeypatch.setattr(
-        main,
-        "QdrantClient",
-        FakeQdrantClient,
-    )
-    monkeypatch.setattr(
-        main,
-        "OllamaClient",
-        FakeOllamaClient,
-    )
+def test_ready_when_dependencies_and_models_are_available(
+    monkeypatch,
+):
+    configure_available_dependencies(monkeypatch)
 
     response = TestClient(main.app).get("/ready")
 
@@ -78,6 +90,8 @@ def test_ready_when_both_dependencies_respond(monkeypatch):
         "dependencies": {
             "qdrant": "ok",
             "ollama": "ok",
+            "llm_model": "ok",
+            "embedding_model": "ok",
         },
     }
 
@@ -113,6 +127,8 @@ def test_ready_returns_503_when_qdrant_is_unavailable(
         "dependencies": {
             "qdrant": "unavailable",
             "ollama": "ok",
+            "llm_model": "ok",
+            "embedding_model": "ok",
         },
     }
 
@@ -148,5 +164,99 @@ def test_ready_returns_503_when_ollama_is_unavailable(
         "dependencies": {
             "qdrant": "ok",
             "ollama": "unavailable",
+            "llm_model": "unavailable",
+            "embedding_model": "unavailable",
         },
     }
+
+
+def test_ready_returns_503_when_llm_model_is_missing(
+    monkeypatch,
+):
+    configure_settings(monkeypatch)
+
+    class MissingLLMModelClient(FakeOllamaClient):
+        def list(self):
+            return SimpleNamespace(
+                models=[
+                    SimpleNamespace(
+                        model="nomic-embed-text:latest"
+                    ),
+                ]
+            )
+
+    monkeypatch.setattr(
+        main,
+        "QdrantClient",
+        FakeQdrantClient,
+    )
+    monkeypatch.setattr(
+        main,
+        "OllamaClient",
+        MissingLLMModelClient,
+    )
+
+    response = TestClient(main.app).get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == {
+        "status": "not_ready",
+        "dependencies": {
+            "qdrant": "ok",
+            "ollama": "ok",
+            "llm_model": "missing",
+            "embedding_model": "ok",
+        },
+    }
+
+
+def test_ready_returns_503_when_embedding_model_is_missing(
+    monkeypatch,
+):
+    configure_settings(monkeypatch)
+
+    class MissingEmbeddingModelClient(FakeOllamaClient):
+        def list(self):
+            return SimpleNamespace(
+                models=[
+                    SimpleNamespace(model="llama3.2:3b"),
+                ]
+            )
+
+    monkeypatch.setattr(
+        main,
+        "QdrantClient",
+        FakeQdrantClient,
+    )
+    monkeypatch.setattr(
+        main,
+        "OllamaClient",
+        MissingEmbeddingModelClient,
+    )
+
+    response = TestClient(main.app).get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == {
+        "status": "not_ready",
+        "dependencies": {
+            "qdrant": "ok",
+            "ollama": "ok",
+            "llm_model": "ok",
+            "embedding_model": "missing",
+        },
+    }
+
+
+def test_ready_matches_untagged_model_to_latest():
+    assert main._model_is_available(
+        "nomic-embed-text",
+        {"nomic-embed-text:latest"},
+    )
+
+
+def test_ready_does_not_match_different_model_tags():
+    assert not main._model_is_available(
+        "llama3.2:3b",
+        {"llama3.2:1b"},
+    )
