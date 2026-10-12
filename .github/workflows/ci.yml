@@ -154,7 +154,7 @@ jobs:
           $COMPOSE down -v
 
   web-build:
-    name: Web Build
+    name: Web Tests
     if: needs.changes.outputs.ci == 'true'
     runs-on: ubuntu-latest
     needs: changes

@@ -1,4 +1,3 @@
-
 from collections.abc import Sequence
 from typing import Any
 
@@ -19,10 +18,50 @@ class VectorStore:
         )
         self.collection_name = collection_name
 
+    @staticmethod
+    def _validate_vector_config(
+        collection_info: Any,
+        vector_size: int,
+    ) -> None:
+        vector_config = (
+            collection_info.config.params.vectors
+        )
+
+        if not isinstance(
+            vector_config,
+            models.VectorParams,
+        ):
+            raise RuntimeError(
+                "Qdrant collection uses a named or unsupported "
+                "vector configuration. LocalRAG requires a "
+                "single unnamed vector."
+            )
+
+        if vector_config.size != vector_size:
+            raise RuntimeError(
+                "Qdrant collection vector dimension mismatch: "
+                f"collection expects {vector_config.size}, "
+                f"but the embedding model produced {vector_size}. "
+                "Use a compatible embedding model or migrate "
+                "the collection."
+            )
+
+        if vector_config.distance != models.Distance.COSINE:
+            raise RuntimeError(
+                "Qdrant collection distance mismatch: "
+                f"expected COSINE, found "
+                f"{vector_config.distance}."
+            )
+
     def ensure_collection(
         self,
         vector_size: int,
     ) -> None:
+        if vector_size <= 0:
+            raise ValueError(
+                "Vector size must be greater than zero."
+            )
+
         collections = self.client.get_collections()
 
         exists = any(
@@ -31,6 +70,14 @@ class VectorStore:
         )
 
         if exists:
+            collection_info = self.client.get_collection(
+                collection_name=self.collection_name,
+            )
+
+            self._validate_vector_config(
+                collection_info,
+                vector_size,
+            )
             return
 
         self.client.create_collection(
@@ -68,6 +115,15 @@ class VectorStore:
             raise ValueError(
                 "Search limit must be greater than zero."
             )
+
+        collection_info = self.client.get_collection(
+            collection_name=self.collection_name,
+        )
+
+        self._validate_vector_config(
+            collection_info,
+            len(vector),
+        )
 
         query_arguments: dict[str, Any] = {
             "collection_name": self.collection_name,

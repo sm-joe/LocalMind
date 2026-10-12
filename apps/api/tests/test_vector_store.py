@@ -1,4 +1,3 @@
-
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -16,13 +15,20 @@ def create_store() -> VectorStore:
 
     store.client = MagicMock()
 
+    store.client.get_collection.return_value.config.params.vectors = (
+        models.VectorParams(
+            size=3,
+            distance=models.Distance.COSINE,
+        )
+    )
+
     return store
 
 
 def test_ensure_collection_creates_missing_collection() -> None:
     store = create_store()
-
     store.client.get_collections.return_value.collections = []
+
     store.ensure_collection(vector_size=3)
 
     store.client.create_collection.assert_called_once()
@@ -37,28 +43,115 @@ def test_ensure_collection_creates_missing_collection() -> None:
     assert vector_config.distance == models.Distance.COSINE
 
 
-def test_ensure_collection_does_not_recreate_existing_collection() -> None:
+def test_ensure_collection_rejects_invalid_vector_size() -> None:
+    store = create_store()
+
+    with pytest.raises(
+        ValueError,
+        match="greater than zero",
+    ):
+        store.ensure_collection(vector_size=0)
+
+    store.client.get_collections.assert_not_called()
+    store.client.create_collection.assert_not_called()
+
+
+def test_ensure_collection_validates_existing_collection() -> None:
     store = create_store()
     existing = MagicMock()
     existing.name = "test_collection"
 
     store.client.get_collections.return_value.collections = [
-        existing
+        existing,
     ]
 
     store.ensure_collection(vector_size=3)
+
+    store.client.get_collection.assert_called_once_with(
+        collection_name="test_collection",
+    )
+    store.client.create_collection.assert_not_called()
+
+
+def test_ensure_collection_rejects_dimension_mismatch() -> None:
+    store = create_store()
+    existing = MagicMock()
+    existing.name = "test_collection"
+
+    store.client.get_collections.return_value.collections = [
+        existing,
+    ]
+    store.client.get_collection.return_value.config.params.vectors = (
+        models.VectorParams(
+            size=768,
+            distance=models.Distance.COSINE,
+        )
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="vector dimension mismatch",
+    ):
+        store.ensure_collection(vector_size=3)
+
+    store.client.create_collection.assert_not_called()
+
+
+def test_ensure_collection_rejects_distance_mismatch() -> None:
+    store = create_store()
+    existing = MagicMock()
+    existing.name = "test_collection"
+
+    store.client.get_collections.return_value.collections = [
+        existing,
+    ]
+    store.client.get_collection.return_value.config.params.vectors = (
+        models.VectorParams(
+            size=3,
+            distance=models.Distance.DOT,
+        )
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="distance mismatch",
+    ):
+        store.ensure_collection(vector_size=3)
+
+    store.client.create_collection.assert_not_called()
+
+
+def test_ensure_collection_rejects_named_vector_configuration() -> None:
+    store = create_store()
+    existing = MagicMock()
+    existing.name = "test_collection"
+
+    store.client.get_collections.return_value.collections = [
+        existing,
+    ]
+    store.client.get_collection.return_value.config.params.vectors = {
+        "dense": models.VectorParams(
+            size=3,
+            distance=models.Distance.COSINE,
+        )
+    }
+
+    with pytest.raises(
+        RuntimeError,
+        match="named or unsupported vector configuration",
+    ):
+        store.ensure_collection(vector_size=3)
 
     store.client.create_collection.assert_not_called()
 
 
 def test_upsert_points() -> None:
     store = create_store()
-
     point = models.PointStruct(
         id="chunk-1",
         vector=[0.1, 0.2, 0.3],
         payload={
-            "text": "Hello LocalRAG"
+            "text": "Hello LocalRAG",
         },
     )
 
@@ -87,6 +180,9 @@ def test_search_rejects_empty_vector() -> None:
     ):
         store.search([])
 
+    store.client.get_collection.assert_not_called()
+    store.client.query_points.assert_not_called()
+
 
 def test_search_rejects_invalid_limit() -> None:
     store = create_store()
@@ -100,10 +196,12 @@ def test_search_rejects_invalid_limit() -> None:
             limit=0,
         )
 
+    store.client.get_collection.assert_not_called()
+    store.client.query_points.assert_not_called()
+
 
 def test_search_returns_points() -> None:
     store = create_store()
-
     points = [
         MagicMock(),
         MagicMock(),
@@ -118,6 +216,9 @@ def test_search_returns_points() -> None:
 
     assert result == points
 
+    store.client.get_collection.assert_called_once_with(
+        collection_name="test_collection",
+    )
     store.client.query_points.assert_called_once_with(
         collection_name="test_collection",
         query=[0.1, 0.2, 0.3],
@@ -125,9 +226,85 @@ def test_search_returns_points() -> None:
     )
 
 
-def test_list_points_returns_records_from_multiple_pages() -> None:
+def test_search_rejects_dimension_mismatch() -> None:
+    store = create_store()
+    store.client.get_collection.return_value.config.params.vectors = (
+        models.VectorParams(
+            size=768,
+            distance=models.Distance.COSINE,
+        )
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="vector dimension mismatch",
+    ):
+        store.search([0.1, 0.2, 0.3])
+
+    store.client.query_points.assert_not_called()
+
+
+def test_search_rejects_distance_mismatch() -> None:
+    store = create_store()
+    store.client.get_collection.return_value.config.params.vectors = (
+        models.VectorParams(
+            size=3,
+            distance=models.Distance.DOT,
+        )
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="distance mismatch",
+    ):
+        store.search([0.1, 0.2, 0.3])
+
+    store.client.query_points.assert_not_called()
+
+
+def test_search_filters_by_filename() -> None:
+    store = create_store()
+    points = [MagicMock()]
+    store.client.query_points.return_value.points = points
+
+    result = store.search(
+        vector=[0.1, 0.2, 0.3],
+        limit=5,
+        filename=" report.pdf ",
+    )
+
+    assert result == points
+
+    kwargs = store.client.query_points.call_args.kwargs
+
+    assert kwargs["collection_name"] == "test_collection"
+    assert kwargs["query"] == [0.1, 0.2, 0.3]
+    assert kwargs["limit"] == 5
+
+    query_filter = kwargs["query_filter"]
+
+    assert len(query_filter.must) == 1
+    assert query_filter.must[0].key == "filename"
+    assert query_filter.must[0].match.value == "report.pdf"
+
+
+def test_search_rejects_blank_filename() -> None:
     store = create_store()
 
+    with pytest.raises(
+        ValueError,
+        match="Filename cannot be empty",
+    ):
+        store.search(
+            vector=[0.1, 0.2, 0.3],
+            filename="   ",
+        )
+
+    store.client.query_points.assert_not_called()
+
+
+def test_list_points_returns_records_from_multiple_pages() -> None:
+    store = create_store()
     first_page = [
         MagicMock(id="point-1"),
         MagicMock(id="point-2"),
@@ -169,13 +346,14 @@ def test_list_points_returns_records_from_multiple_pages() -> None:
 
 def test_list_points_stops_when_no_next_page_exists() -> None:
     store = create_store()
-
     points = [MagicMock(id="point-1")]
+
     store.client.scroll.return_value = (points, None)
 
     result = store.list_points(limit=100)
 
     assert result == points
+
     store.client.scroll.assert_called_once_with(
         collection_name="test_collection",
         limit=100,
@@ -198,8 +376,8 @@ def test_list_points_rejects_invalid_limit() -> None:
 
 def test_list_points_rejects_non_advancing_cursor() -> None:
     store = create_store()
-
     points = [MagicMock(id="point-1")]
+
     store.client.scroll.side_effect = [
         (points, "next-page"),
         (points, "next-page"),
@@ -246,38 +424,3 @@ def test_delete_document_rejects_empty_document_id() -> None:
         store.delete_document("   ")
 
     store.client.delete.assert_not_called()
-
-def test_search_filters_by_filename() -> None:
-    store = create_store()
-    points = [MagicMock()]
-    store.client.query_points.return_value.points = points
-
-    result = store.search(
-        vector=[0.1, 0.2, 0.3],
-        limit=5,
-        filename=" report.pdf ",
-    )
-
-    assert result == points
-
-    kwargs = store.client.query_points.call_args.kwargs
-    assert kwargs["collection_name"] == "test_collection"
-    assert kwargs["query"] == [0.1, 0.2, 0.3]
-    assert kwargs["limit"] == 5
-
-    query_filter = kwargs["query_filter"]
-    assert len(query_filter.must) == 1
-    assert query_filter.must[0].key == "filename"
-    assert query_filter.must[0].match.value == "report.pdf"
-
-
-def test_search_rejects_blank_filename() -> None:
-    store = create_store()
-
-    with pytest.raises(ValueError, match="Filename cannot be empty"):
-        store.search(
-            vector=[0.1, 0.2, 0.3],
-            filename="   ",
-        )
-
-    store.client.query_points.assert_not_called()
