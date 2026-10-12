@@ -15,6 +15,15 @@ def create_store() -> VectorStore:
 
     store.client = MagicMock()
 
+    # Default behavior: the collection exists.
+    existing_collection = MagicMock()
+    existing_collection.name = "test_collection"
+
+    store.client.get_collections.return_value.collections = [
+        existing_collection,
+    ]
+
+    # Default schema: three-dimensional cosine vectors.
     store.client.get_collection.return_value.config.params.vectors = (
         models.VectorParams(
             size=3,
@@ -343,6 +352,40 @@ def test_list_points_returns_records_from_multiple_pages() -> None:
         ),
     ]
 
+def test_iter_points_yields_records_page_by_page() -> None:
+    store = create_store()
+
+    first_page = [
+        MagicMock(id="point-1"),
+        MagicMock(id="point-2"),
+    ]
+    second_page = [
+        MagicMock(id="point-3"),
+    ]
+
+    store.client.scroll.side_effect = [
+        (first_page, "next-page"),
+        (second_page, None),
+    ]
+
+    points = store.iter_points(limit=2)
+
+    assert next(points) is first_page[0]
+
+    # The first page has been fetched, but the second has not.
+    assert store.client.scroll.call_count == 1
+
+    assert next(points) is first_page[1]
+    assert store.client.scroll.call_count == 1
+
+    assert next(points) is second_page[0]
+    assert store.client.scroll.call_count == 2
+
+    with pytest.raises(StopIteration):
+        next(points)
+
+    assert store.client.scroll.call_count == 2
+
 
 def test_list_points_stops_when_no_next_page_exists() -> None:
     store = create_store()
@@ -424,3 +467,15 @@ def test_delete_document_rejects_empty_document_id() -> None:
         store.delete_document("   ")
 
     store.client.delete.assert_not_called()
+
+def test_search_returns_empty_when_collection_does_not_exist() -> None:
+    store = create_store()
+    store.client.get_collections.return_value.collections = []
+
+    result = store.search(
+        vector=[0.1, 0.2, 0.3],
+    )
+
+    assert result == []
+    store.client.get_collection.assert_not_called()
+    store.client.query_points.assert_not_called()

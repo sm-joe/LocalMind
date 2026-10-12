@@ -392,11 +392,9 @@ def list_documents() -> DocumentListResponse:
         if not collection_exists:
             return DocumentListResponse(documents=[])
 
-        points = vector_store.list_points(limit=1000)
-
         document_metadata: dict[str, dict[str, str | int]] = {}
 
-        for point in points:
+        for point in vector_store.iter_points(limit=1000):
             payload = point.payload or {}
             raw_document_id = payload.get("document_id")
 

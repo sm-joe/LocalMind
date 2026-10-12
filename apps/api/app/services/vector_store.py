@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from qdrant_client import QdrantClient
@@ -116,6 +116,29 @@ class VectorStore:
                 "Search limit must be greater than zero."
             )
 
+        if filename is not None:
+            normalized_filename = filename.strip()
+
+            if not normalized_filename:
+                raise ValueError(
+                    "Filename cannot be empty."
+                )
+        else:
+            normalized_filename = None
+
+        # A new installation may not have any documents indexed yet.
+        # Return no results instead of requesting a nonexistent collection.
+        collections = self.client.get_collections()
+
+        collection_exists = any(
+            collection.name == self.collection_name
+            for collection in collections.collections
+        )
+
+        if not collection_exists:
+            return []
+
+        # Validate the schema only after confirming the collection exists.
         collection_info = self.client.get_collection(
             collection_name=self.collection_name,
         )
@@ -131,14 +154,7 @@ class VectorStore:
             "limit": limit,
         }
 
-        if filename is not None:
-            normalized_filename = filename.strip()
-
-            if not normalized_filename:
-                raise ValueError(
-                    "Filename cannot be empty."
-                )
-
+        if normalized_filename is not None:
             query_arguments["query_filter"] = models.Filter(
                 must=[
                     models.FieldCondition(
@@ -154,16 +170,15 @@ class VectorStore:
             **query_arguments,
         ).points
 
-    def list_points(
+    def iter_points(
         self,
         limit: int = 100,
-    ) -> list[Any]:
+    ) -> Iterator[Any]:
+        """Yield Qdrant points page by page."""
         if limit <= 0:
             raise ValueError(
                 "Limit must be greater than zero."
             )
-
-        all_records: list[Any] = []
         offset: Any = None
 
         while True:
@@ -181,7 +196,8 @@ class VectorStore:
                 **scroll_arguments,
             )
 
-            all_records.extend(records)
+            for record in records:
+                yield record
 
             if next_offset is None:
                 break
@@ -193,7 +209,19 @@ class VectorStore:
 
             offset = next_offset
 
-        return all_records
+    def list_points(
+        self,
+        limit: int = 100,
+    ) -> list[Any]:
+        """Return all points for callers that require a list."""
+        if limit <= 0:
+            raise ValueError(
+                "Limit must be greater than zero."
+            )
+
+        return list(
+            self.iter_points(limit=limit)
+        )
 
     def find_document_by_hash(
         self,
