@@ -351,11 +351,7 @@ docker compose up -d
 docker compose ps
 ```
 
-You should see the web, API, PostgreSQL, Qdrant, and Ollama services (plus the one-shot model provisioning service when it runs):
-
-```powershell
-docker compose ps
-```
+You should see the web, API, PostgreSQL, Qdrant, and Ollama services (plus the one-shot model provisioning service when it runs)
 
 ## 6. Open the application
 

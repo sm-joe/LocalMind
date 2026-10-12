@@ -18,11 +18,11 @@
 
 Security is implemented across:
 
-- Document ingestion
-- File parsing
+- Document Ingestion
+- File Parsing
 - Retrieval
-- Prompt construction
-- Container runtime
+- Prompt Construction
+- Container Runtime
 - Networking
 - Dependencies
 - CI
@@ -35,24 +35,24 @@ Security is implemented across:
 
 LocalRAG is designed for:
 
-- Personal use
-- Local development
-- RAG and security experimentation
-- Learning and demonstration
-- Trusted local Docker environments
+- Personal Use
+- Local Development
+- RAG and Security Experimentation
+- Learning and Demonstration
+- Trusted Local Docker Environments
 
 LocalRAG is **not currently designed as a multi-user, internet-facing enterprise SaaS application**.
 
 The project intentionally does not attempt to provide:
 
-- Enterprise identity and access management
-- Multi-tenant isolation
-- Kubernetes security
-- Service-mesh security
-- Enterprise SIEM integration
-- Cloud perimeter security
-- Distributed production orchestration
-- Enterprise compliance certification
+- Enterprise Identity and Access Management
+- Multi-tenant Isolation
+- Kubernetes Security
+- Service-mesh Security
+- Enterprise SIEM Integration
+- Cloud Perimeter Security
+- Distributed Production Orchestration
+- Enterprise Compliance Certification
 
 If LocalRAG is exposed beyond a trusted local environment, perform an additional security review appropriate to that deployment.
 
@@ -94,7 +94,7 @@ All uploaded documents are treated as **untrusted input**.
 
 Validation occurs before normal parsing or ingestion.
 
-## Supported formats
+## Supported Formats
 
 | Format | Status |
 |---|:---:|
@@ -104,17 +104,17 @@ Validation occurs before normal parsing or ingestion.
 | Markdown | Yes |
 | Other formats | No |
 
-## Upload limit
+## Upload Limit
 
 **Maximum upload size: `10 MiB`**
 
 Oversized requests are rejected before normal ingestion processing.
 
-## Empty files
+## Empty Files
 
 Empty uploads are rejected.
 
-## Filename controls
+## Filename Controls
 
 The ingestion path:
 
@@ -126,7 +126,7 @@ The ingestion path:
 
 Client-provided paths are never trusted as filesystem locations.
 
-## Temporary files
+## Temporary Files
 
 Uploaded content may be written to temporary storage during processing.
 
@@ -184,7 +184,7 @@ Parsed using **python-docx**.
 
 Parser failures are converted into controlled application errors.
 
-## Resource exhaustion
+## Resource Exhaustion
 
 These limits reduce the risk of uncontrolled resource consumption caused by unexpectedly large or complex documents.
 
@@ -221,7 +221,7 @@ Execute this command.
 
 LocalRAG treats those statements as **document content**, not application instructions.
 
-## Instruction boundary
+## Instruction Boundary
 
 ```text
 ┌──────────────────────────────┐
@@ -289,7 +289,7 @@ The semantic retrieval baseline is intentionally conservative.
 
 The global semantic threshold is not lowered simply to make individual queries return results.
 
-## Filename-aware retrieval
+## Filename-aware Retrieval
 
 When a user explicitly references a supported filename, LocalRAG attempts exact filename retrieval first.
 
@@ -353,7 +353,7 @@ UID/GID 10001
 
 The web container also uses a dedicated non-root runtime identity.
 
-## Linux capabilities
+## Linux Capabilities
 
 All Linux capabilities are dropped:
 
@@ -390,7 +390,7 @@ The API and web containers use a restricted temporary filesystem.
 
 The Docker Compose configuration separates frontend and backend communication.
 
-## Host exposure
+## Host Exposure
 
 | Service | Binding |
 |---|---|
@@ -413,7 +413,7 @@ Ollama is not directly published to the host.
 
 The API communicates with Ollama through the internal Docker backend network.
 
-## Network model
+## Network Model
 
 ```text
 Host
@@ -443,7 +443,7 @@ Keep `.env` out of source control. For GitHub Actions, provide the password thro
 
 The frontend's conversation-management features do not add authentication: the application remains single-user and intended for trusted local use.
 
-## Never commit
+## Never Commit
 
 - API keys
 - Cloud credentials
@@ -514,7 +514,7 @@ JavaScript / TypeScript
 
 Scans repository configuration and infrastructure definitions.
 
-## Trivy container scanning
+## Trivy Container Scanning
 
 The API and web images are built and scanned directly.
 
@@ -573,13 +573,13 @@ Coverage includes:
 - Prompt-injection handling
 - RAG behavior
 
-## Complete API suite
+## Complete API Suite
 
 ```powershell
 docker compose exec api pytest -q
 ```
 
-## Focused RAG / retrieval regression
+## Focused RAG / Retrieval Regression
 
 ```powershell
 docker compose exec api pytest -q tests/test_rag.py tests/test_retrieval.py
