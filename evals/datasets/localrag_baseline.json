@@ -1,159 +1,89 @@
 {
-  "name": "LocalRAG Baseline Evaluation",
-  "version": "2.0",
-  "description": "Baseline evaluation dataset for LocalRAG retrieval, answer coverage, citations, and grounding.",
+  "name": "LocalRAG Multi-Document Evaluation",
+  "version": "3.0",
+  "description": "Self-contained, multi-document benchmark. The evaluation runner provisions this corpus into an isolated evaluation stack and removes only documents created by that run.",
+  "documents": [
+    {
+      "id": "architecture",
+      "filename": "architecture.md",
+      "content": "# LocalRAG architecture\n\nLocalRAG uses Qdrant as its vector database for vector storage and semantic similarity search. The backend API is built with FastAPI. The web user interface uses Next.js and React. Ollama runs the local large language model and generates document embeddings. PostgreSQL stores relational application data and conversation metadata. Qdrant is the vector store; PostgreSQL is not the vector store."
+    },
+    {
+      "id": "rag-fundamentals",
+      "filename": "rag-fundamentals.md",
+      "content": "# Retrieval-augmented generation fundamentals\n\nRetrieval-augmented generation, abbreviated RAG, combines retrieval of relevant information from a document collection with generation by a large language model (LLM). The retriever finds evidence relevant to a user's question. The language model uses that evidence to compose an answer. Retrieval supplies external context; generation turns the context into a natural-language response."
+    },
+    {
+      "id": "ingestion-pipeline",
+      "filename": "ingestion-pipeline.md",
+      "content": "# Document ingestion pipeline\n\nBefore a document is stored in a vector database, LocalRAG validates and parses the source file to extract text. The extracted text is split into smaller, optionally overlapping chunks. An embedding model converts each chunk into a numeric embedding vector. The vectors and their source metadata are then indexed in Qdrant. The metadata links each chunk to its source document and supports citations."
+    },
+    {
+      "id": "query-lifecycle",
+      "filename": "query-lifecycle.md",
+      "content": "# Question and answer lifecycle\n\nWhen a user asks a question, LocalRAG converts the question into an embedding using the configured embedding model. It searches Qdrant for semantically similar document chunks. The retrieved chunks become the evidence context supplied to the local language model. The generated answer includes citations mapped to the retrieved sources. When the retrieved documents do not contain sufficient evidence, the application should abstain rather than invent an answer."
+    },
+    {
+      "id": "operations-guide",
+      "filename": "operations-guide.md",
+      "content": "# Local deployment operations\n\nThe local application is orchestrated with Docker Compose. Health checks help determine whether dependent services are ready. Model downloads require network access during initial provisioning; inference and document retrieval can then run locally. Persistent database and vector-store volumes preserve state across container restarts. Operational checks should inspect service health, model availability, disk capacity, and application logs."
+    }
+  ],
   "cases": [
     {
       "id": "rag-001",
       "question": "What does LocalRAG use for vector storage?",
       "expected_answer": "LocalRAG uses Qdrant for vector storage.",
+      "expected_sources": ["architecture"],
       "expected_concepts": [
-        {
-          "name": "Qdrant",
-          "variants": [
-            "Qdrant"
-          ]
-        },
-        {
-          "name": "vector storage",
-          "variants": [
-            "vector storage",
-            "vector database"
-          ]
-        }
-      ],
-      "expected_filename": "rag-filename-test.txt"
+        {"name": "Qdrant", "variants": ["Qdrant"]},
+        {"name": "vector storage", "variants": ["vector storage", "vector database", "vector store"]}
+      ]
     },
     {
       "id": "rag-002",
-      "question": "What does RAG combine?",
+      "question": "What does retrieval-augmented generation combine?",
       "expected_answer": "RAG combines document retrieval with a large language model.",
+      "expected_sources": ["rag-fundamentals"],
       "expected_concepts": [
-        {
-          "name": "document retrieval",
-          "variants": [
-            "document retrieval",
-            "retrieval"
-          ]
-        },
-        {
-          "name": "large language model",
-          "variants": [
-            "large language model",
-            "language model",
-            "LLM"
-          ]
-        }
-      ],
-      "expected_filename": "rag-filename-test.txt"
+        {"name": "document retrieval", "variants": ["document retrieval", "retrieval of relevant information", "retrieval"]},
+        {"name": "large language model", "variants": ["large language model", "language model", "LLM"]}
+      ]
     },
     {
       "id": "rag-003",
       "question": "How are documents processed before being stored in the vector database?",
       "expected_answer": "Documents are parsed, split into chunks, converted into embeddings, and stored in a vector database.",
+      "expected_sources": ["ingestion-pipeline"],
       "expected_concepts": [
-        {
-          "name": "document parsing",
-          "variants": [
-            "parsed",
-            "parsing",
-            "being parsed"
-          ]
-        },
-        {
-          "name": "chunking",
-          "variants": [
-            "split into chunks",
-            "splitting into chunks",
-            "chunks",
-            "chunking"
-          ]
-        },
-        {
-          "name": "embeddings",
-          "variants": [
-            "embeddings",
-            "embedding"
-          ]
-        },
-        {
-          "name": "vector database",
-          "variants": [
-            "vector database",
-            "vector storage"
-          ]
-        }
-      ],
-      "expected_filename": "rag-filename-test.txt"
+        {"name": "document parsing", "variants": ["parsed", "parsing", "extract text"]},
+        {"name": "chunking", "variants": ["split into chunks", "chunks", "chunking"]},
+        {"name": "embeddings", "variants": ["embeddings", "embedding"]},
+        {"name": "vector database", "variants": ["vector database", "vector storage", "Qdrant"]}
+      ]
     },
     {
       "id": "rag-004",
       "question": "What happens when a user asks a question?",
-      "expected_answer": "The question is converted into an embedding and the vector database is searched for semantically relevant document chunks.",
+      "expected_answer": "The question is embedded, Qdrant retrieves semantically relevant chunks, and the local language model answers using that evidence.",
+      "expected_sources": ["query-lifecycle"],
       "expected_concepts": [
-        {
-          "name": "question embedding",
-          "variants": [
-            "question is converted into an embedding",
-            "question into an embedding",
-            "converts the question into an embedding",
-            "question embedding",
-            "embedding"
-          ]
-        },
-        {
-          "name": "vector database search",
-          "variants": [
-            "searches the vector database",
-            "vector database is searched",
-            "search the vector database",
-            "vector database search"
-          ]
-        },
-        {
-          "name": "relevant document chunks",
-          "variants": [
-            "semantically relevant document chunks",
-            "relevant document chunks",
-            "relevant chunks",
-            "document chunks"
-          ]
-        }
-      ],
-      "expected_filename": "rag-filename-test.txt"
+        {"name": "question embedding", "variants": ["question into an embedding", "question embedding", "converts the question", "embedding"]},
+        {"name": "vector database search", "variants": ["searches Qdrant", "search Qdrant", "searches the vector database", "vector database", "Qdrant"]},
+        {"name": "relevant document chunks", "variants": ["semantically similar document chunks", "relevant document chunks", "relevant chunks", "document chunks"]}
+      ]
     },
     {
       "id": "rag-005",
-      "question": "What technologies does LocalRAG use?",
-      "expected_answer": "LocalRAG uses FastAPI for the backend, Next.js for the user interface, Ollama for local models, and Qdrant for vector storage.",
+      "question": "What technologies does LocalRAG use for its backend, interface, local models, and vector storage?",
+      "expected_answer": "LocalRAG uses FastAPI, Next.js, Ollama, and Qdrant.",
+      "expected_sources": ["architecture"],
       "expected_concepts": [
-        {
-          "name": "FastAPI",
-          "variants": [
-            "FastAPI"
-          ]
-        },
-        {
-          "name": "Next.js",
-          "variants": [
-            "Next.js",
-            "NextJS"
-          ]
-        },
-        {
-          "name": "Ollama",
-          "variants": [
-            "Ollama"
-          ]
-        },
-        {
-          "name": "Qdrant",
-          "variants": [
-            "Qdrant"
-          ]
-        }
-      ],
-      "expected_filename": "rag-filename-test.txt"
+        {"name": "FastAPI", "variants": ["FastAPI"]},
+        {"name": "Next.js", "variants": ["Next.js", "NextJS"]},
+        {"name": "Ollama", "variants": ["Ollama"]},
+        {"name": "Qdrant", "variants": ["Qdrant"]}
+      ]
     }
   ]
 }

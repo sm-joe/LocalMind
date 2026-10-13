@@ -261,7 +261,7 @@ def test_rag_prompt_contains_question_and_context():
 
     assert question in prompt
     assert "LocalRAG uses Qdrant for vector storage." in prompt
-    assert "[1]" in prompt
+    assert "⟦SRC:1⟧" in prompt
 
 
 def test_rag_rejects_empty_question():

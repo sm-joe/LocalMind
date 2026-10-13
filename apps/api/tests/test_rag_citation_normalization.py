@@ -76,3 +76,52 @@ def test_accepts_multiple_valid_citations():
         answer,
         source_count=2,
     ) == answer
+
+def test_normalizes_explicit_source_tokens_to_public_citations():
+    answer = "S3 is described in the source. ⟦SRC:4⟧"
+
+    assert RAGService._normalize_answer(answer) == (
+        "S3 is described in the source. [4]"
+    )
+
+
+def test_context_uses_source_tokens_distinct_from_document_question_numbers():
+    from app.services.retrieval import RetrievedChunk
+
+    chunk = RetrievedChunk(
+        document_id="doc-1",
+        filename="Interview_Questions.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        chunk_id=15,
+        text="16. What is Amazon S3?",
+        start_char=0,
+        end_char=22,
+        score=0.9,
+    )
+
+    context = RAGService._format_context([chunk])
+
+    assert "Citation token: ⟦SRC:1⟧" in context
+    assert "16. What is Amazon S3?" in context
+    assert "Citation token: ⟦SRC:16⟧" not in context
+
+
+def test_context_uses_real_line_breaks_between_source_fields():
+    from app.services.retrieval import RetrievedChunk
+
+    chunk = RetrievedChunk(
+        document_id="doc-1",
+        filename="Interview_Questions.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        chunk_id=3,
+        text="Qdrant stores vectors.",
+        start_char=0,
+        end_char=22,
+        score=0.9,
+    )
+
+    context = RAGService._format_context([chunk])
+
+    assert "\nFilename: Interview_Questions.docx\n" in context
+    assert "\nCitation token: ⟦SRC:1⟧\n" in context
+    assert "\\nFilename:" not in context

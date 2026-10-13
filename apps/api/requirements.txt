@@ -16,3 +16,6 @@ urllib3==2.8.0
 SQLAlchemy==2.0.50
 alembic==1.18.4
 psycopg[binary]==3.3.6
+
+# Graph-based RAG orchestration inspired by agentic-rag-for-dummies.
+langgraph==1.2.9

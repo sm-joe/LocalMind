@@ -19,7 +19,7 @@ services:
     command:
       - sh
       - -c
-      - alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+      - alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info
     ports:
       - "127.0.0.1:8000:8000"
     security_opt:

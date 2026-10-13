@@ -1,7 +1,9 @@
+import json
 import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -360,3 +362,160 @@ def chat(
             status_code=500,
             detail="RAG chat failed.",
         ) from exc
+
+
+def _sse_event(event: str, payload: dict) -> str:
+    """Encode one Server-Sent Event with JSON data."""
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+
+@router.post("/stream")
+def chat_stream(
+    request: ChatRequest,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        max_length=128,
+    ),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Stream retrieval progress and Ollama tokens; finish with a validated response."""
+    if idempotency_key and not request.conversation_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Idempotency-Key requires a conversation_id.",
+        )
+
+    user_message: Message | None = None
+    assistant_message: Message | None = None
+
+    if request.conversation_id:
+        try:
+            user_message, assistant_message, replay = _persist_start(
+                db=db,
+                conversation_id=request.conversation_id,
+                question=request.question,
+                idempotency_key=idempotency_key,
+            )
+            if replay is not None:
+                def replay_events():
+                    yield _sse_event("final", replay.model_dump(mode="json"))
+                return StreamingResponse(
+                    replay_events(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache, no-transform",
+                        "X-Accel-Buffering": "no",
+                    },
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            db.rollback()
+            logger.exception("Could not persist streaming chat request.")
+            raise HTTPException(
+                status_code=500,
+                detail="Could not persist chat request.",
+            ) from exc
+
+    try:
+        service = create_rag_service()
+    except Exception as exc:
+        if assistant_message is not None:
+            _mark_failed(db, assistant_message.id, exc)
+        logger.exception("Could not initialize streaming RAG service.")
+        raise HTTPException(
+            status_code=503,
+            detail="The RAG service is unavailable.",
+        ) from exc
+
+    def event_stream():
+        try:
+            for update in service.stream_answer(
+                question=request.question,
+                top_k=request.top_k,
+            ):
+                event_type = update.get("type", "status")
+                if event_type != "complete":
+                    payload = {key: value for key, value in update.items() if key != "type"}
+                    yield _sse_event(event_type, payload)
+                    continue
+
+                result = update["result"]
+                response = ChatResponse(
+                    answer=result.answer,
+                    sources=[
+                        ChatSource(
+                            document_id=source.document_id,
+                            filename=source.filename,
+                            chunk_id=source.chunk_id,
+                            score=source.score,
+                            citation=source.citation,
+                        )
+                        for source in result.sources
+                    ],
+                    retrieval=ChatRetrievalDiagnostics(
+                        requested_limit=result.retrieval.requested_limit,
+                        candidate_count=result.retrieval.candidate_count,
+                        returned_count=result.retrieval.returned_count,
+                        filtered_count=result.retrieval.filtered_count,
+                        top_candidate_score=result.retrieval.top_candidate_score,
+                        bottom_candidate_score=result.retrieval.bottom_candidate_score,
+                        top_score=result.retrieval.top_score,
+                        bottom_score=result.retrieval.bottom_score,
+                        has_context=result.retrieval.has_context,
+                    ),
+                    performance=ChatPerformance(
+                        embedding_ms=result.performance.embedding_ms,
+                        retrieval_ms=result.performance.retrieval_ms,
+                        prompt_build_ms=result.performance.prompt_build_ms,
+                        llm_ms=result.performance.llm_ms,
+                        total_ms=result.performance.total_ms,
+                    ),
+                    conversation_id=request.conversation_id,
+                    user_message_id=user_message.id if user_message else None,
+                    assistant_message_id=assistant_message.id if assistant_message else None,
+                )
+
+                if assistant_message is not None:
+                    assistant_message.content = response.answer
+                    assistant_message.status = "complete"
+                    assistant_message.metadata_json = {
+                        "retrieval": response.retrieval.model_dump(mode="json"),
+                        "performance": response.performance.model_dump(mode="json"),
+                    }
+                    for index, source in enumerate(response.sources, start=1):
+                        db.add(
+                            MessageSource(
+                                message_id=assistant_message.id,
+                                source_index=index,
+                                document_id=source.document_id,
+                                filename=source.filename,
+                                chunk_id=source.chunk_id,
+                                score=source.score,
+                                citation=source.citation,
+                            )
+                        )
+                    conversation = db.get(Conversation, request.conversation_id)
+                    if conversation is not None:
+                        conversation.updated_at = datetime.now(timezone.utc)
+                    db.commit()
+
+                yield _sse_event("final", response.model_dump(mode="json"))
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            if assistant_message is not None:
+                _mark_failed(db, assistant_message.id, exc)
+            logger.exception("Streaming RAG chat failed; exception_type=%s", type(exc).__name__)
+            yield _sse_event("error", {"message": "RAG chat failed. Check the API logs."})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

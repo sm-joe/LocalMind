@@ -1,0 +1,31 @@
+# Isolated LocalRAG evaluation stack. Uses the existing service definitions but
+# separate container names, API port, Qdrant collection, and PostgreSQL volume.
+# Run with project name `localrag-eval`; do not point the evaluator at the user stack.
+services:
+  api:
+    container_name: localrag-eval-api
+    environment:
+      QDRANT_COLLECTION: localrag_evaluation_documents
+    ports: !override
+      - "127.0.0.1:18000:8000"
+
+  web:
+    container_name: localrag-eval-web
+    ports: !override
+      - "127.0.0.1:13000:3000"
+
+  postgres:
+    container_name: localrag-eval-postgres
+
+  qdrant:
+    container_name: localrag-eval-qdrant
+
+  ollama-init:
+    container_name: localrag-eval-ollama-init
+
+  ollama:
+    container_name: localrag-eval-ollama
+
+volumes:
+  postgres_data_fresh:
+    name: localrag_eval_postgres_data
