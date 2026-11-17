@@ -540,6 +540,11 @@ Return the corrected answer now:"""
             "cite its supporting source, and do not invent missing items."
             if count_match else ""
         )
+        normal_answer_guidance = (
+            "- For ordinary questions, prefer a clear answer with usually "
+            "3-6 bullets when useful; avoid unnecessary filler."
+            if not summary_mode and not count_match else ""
+        )
         summary_requirements = """
 DOCUMENT SUMMARY MODE
 The user asked for a summary. Summarize the retrieved document content itself, even if the document does not contain a prewritten summary.
@@ -568,7 +573,7 @@ SECURITY RULES
 {count_requirements}
 ANSWERING RULES
 - Answer the user's question directly and concisely.
-- For ordinary questions, prefer a clear answer with usually 3-6 bullets when useful; avoid unnecessary filler.
+{normal_answer_guidance}
 - Use the retrieved documents as the source of truth.
 - Do not invent facts, quotations, or citations.
 - If the documents do not support an answer, clearly state that there is insufficient information.
