@@ -131,6 +131,9 @@ jobs:
     env:
       COMPOSE: docker compose -f docker-compose.yml -f .github/ci-compose.yml
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      LOCALRAG_API_KEY: "ci-localrag-api-key-not-for-production-only"
+      LOCALRAG_ADMIN_PASSWORD: "ci-localrag-admin-password-only"
+      LOCALRAG_SESSION_SECRET: "ci-localrag-session-secret-not-for-production"
 
     steps:
       - name: Checkout Repository
