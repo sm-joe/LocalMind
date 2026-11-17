@@ -10,3 +10,9 @@ yarn-error.log*
 pnpm-debug.log*
 coverage
 dist
+
+# The web app uses plain CSS, not Tailwind. Do not copy untracked
+# local PostCSS/Tailwind configs into Docker: Turbopack may load plugins
+# which are not declared in the package lockfile.
+postcss.config.*
+tailwind.config.*
