@@ -91,7 +91,7 @@ The application now includes PostgreSQL-backed conversation persistence alongsid
 - Chat requests can use `conversation_id` and an `Idempotency-Key` to make retries safe.
 - Qdrant remains dedicated to document chunks, embeddings, and similarity retrieval; it is not the conversation database.
 
-The current deployment remains a local, single-user application. Conversation ownership metadata does not provide authentication or authorization.
+The current deployment remains single-user. The web UI now requires a password-protected, signed HttpOnly session and holds the API key on the server. This is **not multi-user identity or tenant isolation**; the shared `local` ownership ID remains unchanged.
 
 ### Local by design
 
@@ -328,6 +328,10 @@ Create a local environment file if one does not already exist:
 ```powershell
 Copy-Item .env.example .env
 ```
+
+Set strong, unique values for `POSTGRES_PASSWORD`, `LOCALRAG_ADMIN_PASSWORD` (12+ characters), `LOCALRAG_API_KEY` (32+ random characters), and `LOCALRAG_SESSION_SECRET` (32+ random characters) in the repository-root `.env`. Use **different** credentials for each. After starting Docker Compose, visit http://localhost:3000 and sign in using `LOCALRAG_ADMIN_PASSWORD`. The browser receives only an HttpOnly signed session cookie, not `LOCALRAG_API_KEY`. API requests are proxied by Next.js. Direct requests to http://127.0.0.1:8000 need an `X-API-Key` header.
+
+Avoid exposing ports 3000 or 8000 on a public interface without HTTPS, rate limiting, and further hardening. Rotating `LOCALRAG_SESSION_SECRET` invalidates existing sessions; rotating the admin password alone does not revoke previously issued sessions.
 
 Set a strong, unique `POSTGRES_PASSWORD` in the repository-root `.env` file before starting the stack. Keep `.env` private and out of Git; do not put real secrets in `.env.example`.
 
@@ -1209,7 +1213,7 @@ For retry-safe chat requests, send a stable `Idempotency-Key` header with `conve
 
 The frontend history/sidebar is integrated with the existing document upload and RAG chat workflows. The evidence panel must display citations returned by the API; it must not invent source passages.
 
-The deployment remains local and single-user. Ownership metadata is not authentication, authorization, or tenant isolation. Do not expose the API to untrusted networks until those controls are implemented.
+The deployment remains local and single-user. The web session and API key provide single-instance access control, but the shared conversation owner is not tenant isolation. Do not expose the service to untrusted networks without further security review, HTTPS and brute-force protection.
 
 ## Persistence validation
 
