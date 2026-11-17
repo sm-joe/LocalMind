@@ -77,6 +77,37 @@ LocalRAG focuses on those boundaries:
 
 ---
 
+
+## Backups and evaluation
+
+A local backup utility captures a PostgreSQL custom-format dump and a Qdrant
+collection snapshot with SHA-256 integrity hashes. Run this from the repository
+root, with Docker services healthy and document uploads/chat writes paused:
+
+```powershell
+python scripts/backup_localrag.py --output backups
+python scripts/backup_localrag.py --verify backups/<backup-folder>
+```
+
+The backup folder contains private conversation and document data. Encrypt it,
+protect access, and store copies off-machine. The script deliberately **does not
+delete or recreate Docker volumes**. PostgreSQL and Qdrant are separate stores:
+their snapshots are not atomically coordinated, so pause writes during backup.
+A verified integrity manifest is **not a tested restore**; a fully validated
+restore procedure and disaster-recovery drill are still required before release.
+
+For the live model-based evaluation after uploading the fixture document:
+
+```powershell
+$env:LOCALRAG_API_KEY = "<value from your private .env>"
+$env:LOCALRAG_EVAL_API_URL = "http://127.0.0.1:8000/chat"
+python evals/run_evaluation.py
+Remove-Item Env:LOCALRAG_API_KEY
+```
+
+CI also runs deterministic tests of backup integrity and evaluation scoring.
+Those tests are not a substitute for a live Ollama RAG-quality acceptance run.
+
 ## Highlights
 
 ### Persistent conversations and history (Phase A–C)
