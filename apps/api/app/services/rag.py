@@ -151,7 +151,14 @@ class RAGService:
                 limit=top_k,
             )
         else:
-            retrieval_result = self.retrieval_service.retrieve(
+            # Support retrieval adapters which expose an explicitly named
+            # hybrid entrypoint, while keeping the existing retrieve() API.
+            retrieve = getattr(self.retrieval_service, "retrieve", None)
+            if not callable(retrieve):
+                retrieve = getattr(self.retrieval_service, "retrieve_hybrid", None)
+            if not callable(retrieve):
+                raise TypeError("Retrieval adapter has no supported query method.")
+            retrieval_result = retrieve(
                 normalized_question,
                 limit=top_k,
             )
