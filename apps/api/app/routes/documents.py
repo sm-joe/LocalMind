@@ -439,6 +439,42 @@ def list_documents() -> DocumentListResponse:
 
 
 
+class DocumentChunkResponse(BaseModel):
+    document_id: str
+    filename: str
+    chunk_id: int
+    text: str
+    start_char: int
+    end_char: int
+
+
+@router.get(
+    "/{document_id}/chunks/{chunk_id}",
+    response_model=DocumentChunkResponse,
+)
+def get_document_chunk(
+    document_id: str,
+    chunk_id: int,
+) -> DocumentChunkResponse:
+    if not document_id.strip() or chunk_id < 0:
+        raise HTTPException(status_code=400, detail="Invalid chunk identifier.")
+    try:
+        payload = create_vector_store().get_document_chunk(document_id, chunk_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document chunk.")
+        raise HTTPException(status_code=503, detail="Document store unavailable.") from exc
+    if not payload or str(payload.get("document_id")) != document_id or payload.get("chunk_id") != chunk_id:
+        raise HTTPException(status_code=404, detail="Source passage not found.")
+    return DocumentChunkResponse(
+        document_id=document_id,
+        filename=str(payload.get("filename", "unknown")),
+        chunk_id=chunk_id,
+        text=str(payload.get("text", "")),
+        start_char=int(payload.get("start_char", 0)),
+        end_char=int(payload.get("end_char", 0)),
+    )
+
+
 @router.delete(
     "/{document_id}",
     response_model=DocumentDeleteResponse,
