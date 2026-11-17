@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.services.embeddings import EmbeddingService
 from app.services.ingestion import IngestionService
+from app.services.document_registry import DocumentIndexRegistry, DocumentIndexInProgress
 from app.services.vector_store import VectorStore
 
 
@@ -83,7 +84,12 @@ def create_ingestion_service() -> IngestionService:
     return IngestionService(
         embedding_service=embedding_service,
         vector_store=vector_store,
+        registry=DocumentIndexRegistry(),
     )
+
+
+def create_document_registry() -> DocumentIndexRegistry:
+    return DocumentIndexRegistry()
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -347,6 +353,9 @@ async def upload_document(
     except HTTPException:
         raise
 
+    except DocumentIndexInProgress as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
@@ -439,6 +448,29 @@ def list_documents() -> DocumentListResponse:
 
 
 
+class DocumentIndexStatusResponse(BaseModel):
+    document_id: str
+    filename: str
+    status: str
+    chunks: int
+
+
+@router.get(
+    "/status/{document_id}",
+    response_model=DocumentIndexStatusResponse,
+)
+def document_index_status(document_id: str) -> DocumentIndexStatusResponse:
+    record = create_document_registry().get_status(document_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Document indexing state not found.")
+    return DocumentIndexStatusResponse(
+        document_id=record.document_id,
+        filename=record.filename,
+        status=record.status,
+        chunks=record.chunks,
+    )
+
+
 class DocumentChunkResponse(BaseModel):
     document_id: str
     filename: str
@@ -494,6 +526,7 @@ def delete_document(
         vector_store.delete_document(
             document_id
         )
+        create_document_registry().forget(document_id)
 
         return DocumentDeleteResponse(
             document_id=document_id,
