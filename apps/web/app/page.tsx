@@ -132,11 +132,39 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const [sourcePreview, setSourcePreview] = useState<{
+    document_id: string; filename: string; chunk_id: number; text: string;
+  } | null>(null);
+  const [sourcePreviewLoading, setSourcePreviewLoading] = useState(false);
+  const [sourcePreviewError, setSourcePreviewError] = useState<string | null>(null);
+
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const initialLoadStartedRef = useRef(false);
   const messageLoadRequestRef = useRef(0);
+
+  async function previewSource(source: Source) {
+    setSourcePreview(null);
+    setSourcePreviewError(null);
+    setSourcePreviewLoading(true);
+    setEvidencePanelCollapsed(false);
+    try {
+      const response = await fetch(
+        `${API_URL}/documents/${encodeURIComponent(source.document_id)}/chunks/${source.chunk_id}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw await responseError(response, "Could not load source passage.");
+      const data = (await response.json()) as {
+        document_id: string; filename: string; chunk_id: number; text: string;
+      };
+      setSourcePreview(data);
+    } catch (error) {
+      setSourcePreviewError(error instanceof Error ? error.message : "Could not load source passage.");
+    } finally {
+      setSourcePreviewLoading(false);
+    }
+  }
 
   async function loadDocuments() {
     setDocumentsLoading(true);
@@ -846,6 +874,15 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             </div>
             {!evidencePanelCollapsed && (
               <div className="evidence-list">
+                {sourcePreviewLoading && <p role="status">Loading source passage…</p>}
+                {sourcePreviewError && <p role="alert">{sourcePreviewError}</p>}
+                {sourcePreview && (
+                  <section aria-label="Cited source text" style={{ padding: 12, border: "1px solid currentColor", borderRadius: 8 }}>
+                    <strong>{sourcePreview.filename} — chunk {sourcePreview.chunk_id}</strong>
+                    <button type="button" onClick={() => setSourcePreview(null)} aria-label="Close source passage">Close</button>
+                    <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{sourcePreview.text}</p>
+                  </section>
+                )}
                 {evidenceSources.length === 0 ? (
                   <div className="evidence-empty">
                     <span className="evidence-empty-mark">↗</span>
@@ -861,6 +898,14 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                     <strong className="evidence-filename" title={source.filename}>{source.filename}</strong>
                     <p className="evidence-citation">{source.citation}</p>
                     <div className="evidence-card-footer">Chunk {source.chunk_id}</div>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => void previewSource(source)}
+                      aria-label={`Read cited passage ${source.citation} from ${source.filename}`}
+                    >
+                      Read source passage
+                    </button>
                   </article>
                 ))}
               </div>
