@@ -7,6 +7,7 @@ from qdrant_client.http import models
 
 from app.services.chunker import chunk_text
 from app.services.embeddings import EmbeddingService
+from app.services.document_registry import DocumentIndexRegistry, DocumentIndexInProgress
 from app.services.parser import parse_document
 from app.services.vector_store import VectorStore
 
@@ -34,17 +35,64 @@ class IngestionService:
         vector_store: VectorStore,
         chunk_size: int = 1000,
         chunk_overlap: int = 150,
+        registry: DocumentIndexRegistry | None = None,
     ) -> None:
         self.embedding_service = embedding_service
         self.vector_store = vector_store
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.registry = registry
 
     def ingest(
         self,
         file_path: str | Path,
         content_type: str,
         original_filename: str | None = None,
+    ) -> IngestionResult:
+        path = Path(file_path)
+        if self.registry is None:
+            return self._ingest_document(path, content_type, original_filename)
+
+        if not path.is_file():
+            raise ValueError("Document file does not exist.")
+        document_hash = self._calculate_hash(path)
+        filename = original_filename or path.name
+        claim = self.registry.acquire(document_hash, filename, content_type)
+        if claim.status == "ready":
+            return IngestionResult(
+                document_id=claim.document_id,
+                filename=claim.filename,
+                chunks=0,
+                already_indexed=True,
+            )
+        try:
+            if claim.previous_document_id is not None:
+                # Stale/failed attempt may have left partial Qdrant chunks.
+                self.vector_store.delete_document(claim.previous_document_id)
+            result = self._ingest_document(
+                path, content_type, original_filename,
+                document_id=claim.document_id,
+            )
+            self.registry.complete(
+                claim, result.document_id, result.filename, result.chunks
+            )
+            return result
+        except Exception:
+            try:
+                self.registry.fail(claim)
+            except Exception:
+                logger.exception(
+                    "Could not persist failed document indexing for hash=%s",
+                    document_hash,
+                )
+            raise
+
+    def _ingest_document(
+        self,
+        file_path: str | Path,
+        content_type: str,
+        original_filename: str | None = None,
+        document_id: str | None = None,
     ) -> IngestionResult:
         path = Path(file_path)
 
@@ -137,7 +185,7 @@ class IngestionService:
             vector_size=vector_size
         )
 
-        document_id = str(uuid.uuid4())
+        document_id = document_id or str(uuid.uuid4())
 
         points: list[models.PointStruct] = []
 
