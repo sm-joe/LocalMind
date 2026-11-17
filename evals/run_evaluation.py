@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -23,7 +24,8 @@ RESULTS_DIR = (
     / "results"
 )
 
-API_URL = "http://localhost:8000/chat"
+API_URL = os.getenv("LOCALRAG_EVAL_API_URL", "http://localhost:8000/chat")
+API_KEY = os.getenv("LOCALRAG_API_KEY", "")
 TOP_K = 3
 
 
@@ -50,6 +52,7 @@ def call_chat_api(
         data=payload,
         headers={
             "Content-Type": "application/json",
+            **({"X-API-Key": API_KEY} if API_KEY else {}),
         },
         method="POST",
     )
