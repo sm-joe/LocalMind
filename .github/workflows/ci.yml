@@ -145,7 +145,7 @@ jobs:
 
       - name: Run API Tests
         run: |
-          $COMPOSE run --rm --build api pytest -q
+          $COMPOSE run --rm --build api sh -c "alembic upgrade head && pytest -q"
 
       - name: Show Service Logs On Failure
         if: failure()
