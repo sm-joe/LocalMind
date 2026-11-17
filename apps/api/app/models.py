@@ -122,3 +122,29 @@ class MessageSource(Base):
     )
 
     message: Mapped[Message] = relationship(back_populates="sources")
+
+
+class DocumentIndex(Base):
+    """Durable state for deduplication and crash-aware ingestion retries."""
+
+    __tablename__ = "document_index"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('indexing', 'ready', 'failed')",
+            name="ck_document_index_status",
+        ),
+        Index("ix_document_index_status_updated", "status", "updated_at"),
+    )
+
+    document_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    chunks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
