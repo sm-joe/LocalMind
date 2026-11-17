@@ -1,4 +1,8 @@
 services:
+  api:
+    environment:
+      APP_ENV: development
+      LOCALRAG_API_KEY: ""
   qdrant:
     environment:
       QDRANT__TELEMETRY_DISABLED: "true"
