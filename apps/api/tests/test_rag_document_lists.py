@@ -67,4 +67,45 @@ def test_requested_numbered_list_reads_document_and_falls_back_to_cited_evidence
     assert calls == ["document"]
     assert "Document excerpt 0" in response.answer
     assert "Document excerpt 1" in response.answer
+    assert "Relevant verbatim excerpts" in response.answer
+    assert "\\n" not in response.answer  # real newlines, not escaped text
+    assert "\n2. " in response.answer
     assert "[1]" in response.answer and "[2]" in response.answer
+
+
+def test_extraction_requests_specific_document_limit_and_action_verbs():
+    assert RAGService.REQUESTED_COUNT_PATTERN.search(
+        "Extract 7 tools from the file."
+    ).group(1) == "7"
+
+    calls = []
+    class Retrieval:
+        def retrieve_document(self, question, limit=None):
+            calls.append((question, limit))
+            return _result([_chunk(i) for i in range(10)])
+
+    class LLM:
+        def generate(self, prompt):
+            return "1. Document excerpt about AWS [1]."
+
+    response = RAGService(Retrieval(), LLM()).answer(
+        "List top 10 services mentioned in the document."
+    )
+    assert calls == [("List top 10 services mentioned in the document.", 16)]
+    assert len(response.sources) == 10
+
+
+def test_regular_question_prompt_includes_concise_format_guidance():
+    prompts = []
+    class Retrieval:
+        def retrieve_hybrid(self, question, limit=None):
+            return _result([_chunk(i) for i in range(6)])
+
+    class LLM:
+        def generate(self, prompt):
+            prompts.append(prompt)
+            return "AWS service evidence [1]."
+
+    response = RAGService(Retrieval(), LLM()).answer("What does AWS provide?")
+    assert len(response.sources) == 5
+    assert "usually 3-6 bullets" in prompts[0]
