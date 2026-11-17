@@ -248,6 +248,21 @@ class RAGService:
                 answer=generated_answer,
                 source_count=len(chunks),
             )
+            # For requested document-wide lists, an ungrounded generation
+            # must never become an invented answer. Return only verbatim
+            # indexed passages, each with its actual source citation.
+            if (
+                answer == self.INVALID_CITATION_ANSWER
+                and self.REQUESTED_COUNT_PATTERN.search(normalized_question)
+            ):
+                answer = self._verbatim_excerpts(
+                    chunks=chunks,
+                    requested_count=int(
+                        self.REQUESTED_COUNT_PATTERN.search(
+                            normalized_question
+                        ).group(1)
+                    ),
+                )
 
         sources = [
             RAGSource(
@@ -292,6 +307,23 @@ class RAGService:
             retrieval=retrieval_result.diagnostics,
             performance=performance,
         )
+
+    @classmethod
+    def _verbatim_excerpts(
+        cls,
+        chunks: list[RetrievedChunk],
+        requested_count: int,
+    ) -> str:
+        """Safe fallback: quote actual retrieved material, never infer facts."""
+        lines = []
+        for number, chunk in enumerate(
+            chunks[:min(requested_count, cls.MAX_CONTEXT_CHUNKS)],
+            start=1,
+        ):
+            excerpt = " ".join(chunk.text.split())[:300].strip()
+            if excerpt:
+                lines.append(f'{number}. "{excerpt}" [{number}]')
+        return "\\n".join(lines) if lines else cls.INVALID_CITATION_ANSWER
 
     @classmethod
     def _is_summary_request(cls, question: str) -> bool:
