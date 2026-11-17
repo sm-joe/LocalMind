@@ -79,6 +79,7 @@ def test_extraction_requests_specific_document_limit_and_action_verbs():
     ).group(1) == "7"
 
     calls = []
+    prompts = []
     class Retrieval:
         def retrieve_document(self, question, limit=None):
             calls.append((question, limit))
@@ -86,6 +87,7 @@ def test_extraction_requests_specific_document_limit_and_action_verbs():
 
     class LLM:
         def generate(self, prompt):
+            prompts.append(prompt)
             return "1. Document excerpt about AWS [1]."
 
     response = RAGService(Retrieval(), LLM()).answer(
@@ -93,6 +95,7 @@ def test_extraction_requests_specific_document_limit_and_action_verbs():
     )
     assert calls == [("List top 10 services mentioned in the document.", 16)]
     assert len(response.sources) == 10
+    assert "Return exactly 10 distinct items" in prompts[0]
 
 
 def test_regular_question_prompt_includes_concise_format_guidance():
