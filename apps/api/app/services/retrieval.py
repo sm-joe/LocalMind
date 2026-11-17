@@ -47,6 +47,12 @@ class RetrievalResult:
 
 
 class RetrievalService:
+    STOPWORDS = frozenset({
+        "the", "and", "for", "with", "from", "this", "that", "what",
+        "when", "where", "which", "does", "are", "was", "how",
+        "can", "into", "about", "please", "your",
+    })
+
     SUPPORTED_FILENAME_EXTENSIONS = (
         ".pdf",
         ".docx",
@@ -74,6 +80,7 @@ class RetrievalService:
         vector_store: VectorStore,
         top_k: int = 5,
         score_threshold: float = 0.0,
+        lexical_weight: float = 0.0,
     ) -> None:
         if top_k <= 0:
             raise ValueError(
@@ -90,6 +97,9 @@ class RetrievalService:
         self.vector_store = vector_store
         self.top_k = top_k
         self.score_threshold = score_threshold
+        if not 0.0 <= lexical_weight <= 1.0:
+            raise ValueError("lexical_weight must be between 0 and 1.")
+        self.lexical_weight = lexical_weight
 
     def retrieve(
         self,
@@ -155,6 +165,7 @@ class RetrievalService:
 
         return self._build_result(
             results=results,
+            query=normalized_query,
             limit=search_limit,
             embedding_ms=embedding_ms,
             search_ms=search_ms,
@@ -318,6 +329,7 @@ class RetrievalService:
         embedding_ms: float,
         search_ms: float,
         total_start: float,
+        query: str | None = None,
     ) -> RetrievalResult:
         candidate_scores = [
             float(result.score)
@@ -347,10 +359,21 @@ class RetrievalService:
 
             retrieved_chunks.append(chunk)
 
-        retrieved_chunks.sort(
-            key=lambda chunk: chunk.score,
-            reverse=True,
-        )
+        if self.lexical_weight and query:
+            terms = self._query_terms(query)
+            retrieved_chunks.sort(
+                key=lambda chunk: (
+                    chunk.score + self.lexical_weight
+                    * self._lexical_overlap(terms, chunk.text),
+                    chunk.score,
+                ),
+                reverse=True,
+            )
+        else:
+            retrieved_chunks.sort(
+                key=lambda chunk: chunk.score,
+                reverse=True,
+            )
 
         retrieved_chunks = retrieved_chunks[:limit]
 
@@ -401,6 +424,21 @@ class RetrievalService:
             diagnostics=diagnostics,
             performance=performance,
         )
+
+    @classmethod
+    def _query_terms(cls, query: str) -> set[str]:
+        return {
+            token
+            for token in re.findall(r"[a-z0-9]{3,}", query.lower())
+            if token not in cls.STOPWORDS
+        }
+
+    @staticmethod
+    def _lexical_overlap(query_terms: set[str], text: str) -> float:
+        if not query_terms:
+            return 0.0
+        text_terms = set(re.findall(r"[a-z0-9]{3,}", text.lower()))
+        return len(query_terms & text_terms) / len(query_terms)
 
     @classmethod
     def _extract_filename(
