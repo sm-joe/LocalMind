@@ -220,6 +220,34 @@ class VectorStore:
 
             offset = next_offset
 
+    def get_document_chunk(
+        self,
+        document_id: str,
+        chunk_id: int,
+    ) -> dict[str, Any] | None:
+        """Retrieve exactly one document-scoped chunk without vector search."""
+        if not document_id.strip() or chunk_id < 0:
+            raise ValueError("Invalid document or chunk identifier.")
+        records, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="document_id",
+                        match=models.MatchValue(value=document_id),
+                    ),
+                    models.FieldCondition(
+                        key="chunk_id",
+                        match=models.MatchValue(value=chunk_id),
+                    ),
+                ]
+            ),
+            limit=1,
+            with_payload=True,
+            with_vectors=False,
+        )
+        return dict(records[0].payload or {}) if records else None
+
     def list_points(
         self,
         limit: int = 100,
