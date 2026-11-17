@@ -239,26 +239,27 @@ jobs:
           cache-from: type=gha,scope=localrag-api
           cache-to: type=gha,scope=localrag-api,mode=max
 
-      # Report package names, CVEs and fixed versions in the Actions log.
-      # The following SARIF scan remains the blocking security gate.
-      - name: Report API Image Vulnerabilities
+      # The table scan is the blocking security gate; it prints the actual
+      # CVEs and fixed versions for developers to act on.
+      - name: Scan API Image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: "v0.75.0"
           image-ref: localrag-api:ci
           format: table
-          exit-code: '0'
+          exit-code: '1'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
-      - name: Scan API Image
+      # SARIF is for reporting; the gate above already enforces severity.
+      - name: Generate API SARIF Report
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: "v0.75.0"
           image-ref: localrag-api:ci
           format: sarif
           output: trivy-api-results.sarif
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
