@@ -96,6 +96,7 @@ def test_extraction_requests_specific_document_limit_and_action_verbs():
     assert calls == [("List top 10 services mentioned in the document.", 16)]
     assert len(response.sources) == 10
     assert "Return exactly 10 distinct items" in prompts[0]
+    assert "usually 3-6 bullets" not in prompts[0]
 
 
 def test_regular_question_prompt_includes_concise_format_guidance():
@@ -112,3 +113,4 @@ def test_regular_question_prompt_includes_concise_format_guidance():
     response = RAGService(Retrieval(), LLM()).answer("What does AWS provide?")
     assert len(response.sources) == 5
     assert "usually 3-6 bullets" in prompts[0]
+    assert "Return exactly" not in prompts[0]
