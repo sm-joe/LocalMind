@@ -51,5 +51,9 @@ def test_preview_rejects_mismatched_or_missing_passage(monkeypatch):
         "document_id": "other", "chunk_id": 3, "text": "private"
     }
     monkeypatch.setattr(documents, "create_vector_store", lambda: store)
-    response = TestClient(app).get("/documents/abc/chunks/3")
+    app.dependency_overrides[require_api_key] = lambda: None
+    try:
+        response = TestClient(app).get("/documents/abc/chunks/3")
+    finally:
+        app.dependency_overrides.pop(require_api_key, None)
     assert response.status_code == 404
