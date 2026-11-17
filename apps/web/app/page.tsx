@@ -88,8 +88,7 @@ type Message = {
   sources?: Source[];
 };
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = "/api/backend";
 
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt", ".md"];
 
@@ -111,7 +110,7 @@ async function responseError(
   return new Error(fallback);
 }
 
-export default function Home() {
+function Workspace({ onLogout }: { onLogout: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -577,7 +576,7 @@ export default function Home() {
             <h1>Ask your documents.</h1>
             <p className="subtitle">Private, Local Document Retrieval Powered by Ollama and Qdrant.</p>
           </div>
-          <div className="status-pill"><span className="status-dot" />Local</div>
+          <div className="status-pill"><span className="status-dot" />Local</div>\n          <button type="button" onClick={onLogout} className="text-button">Sign out</button>
         </header>
 
         <div className="workspace-grid">
@@ -871,4 +870,71 @@ export default function Home() {
       </section>
     </main>
   );
+}
+
+export default function Home() {
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/session", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((result: { authenticated?: boolean }) => {
+        if (active) setAuthenticated(result.authenticated === true);
+      })
+      .catch(() => { if (active) setAuthenticated(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function signIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoggingIn(true);
+    setLoginError(null);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!response.ok) throw await responseError(response, "Sign in failed.");
+      setPassword("");
+      setAuthenticated(true);
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Sign in failed.");
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setAuthenticated(false);
+  }
+
+  if (authenticated === null) return <main className="app-shell"><p role="status">Checking session…</p></main>;
+  if (!authenticated) return (
+    <main className="app-shell">
+      <section style={{ maxWidth: 420, margin: "12vh auto", padding: 32 }}>
+        <h1>LocalRAG</h1>
+        <p>Sign in to access your private documents and conversations.</p>
+        <form onSubmit={(event) => void signIn(event)}>
+          <label htmlFor="localrag-password">Administrator password</label>
+          <input
+            id="localrag-password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            style={{ width: "100%", padding: 12, marginTop: 12, marginBottom: 16 }}
+          />
+          <button type="submit" disabled={loggingIn}>{loggingIn ? "Signing in…" : "Sign in"}</button>
+          {loginError && <p role="alert">{loginError}</p>}
+        </form>
+      </section>
+    </main>
+  );
+  return <Workspace onLogout={() => void signOut()} />;
 }
