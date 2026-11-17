@@ -46,6 +46,12 @@ class RAGService:
     MAX_CONTEXT_CHARS = 24_000
     MAX_CONTEXT_CHUNKS = 20
     CITATION_PATTERN = re.compile(r"\[(\d+)\]")
+    EXPLICIT_SOURCE_PATTERN = re.compile(r"⟦SRC:(\d+)⟧")
+    REQUESTED_COUNT_PATTERN = re.compile(
+        r"\b(?:list|name|identify|give|show)\s+(?:the\s+)?(?:top\s+)?(\d{1,3})\s+"
+        r"(?:\w+\s+){0,3}?(?:services|tools|items|examples|features|products|resources)\b",
+        re.IGNORECASE,
+    )
     SUMMARY_REQUEST_PATTERN = re.compile(
         r"\b(?:summari[sz](?:e|es|ed|ing|ation)?|summary|"
         r"overview|key points|main points|what is this document about)\b",
@@ -130,7 +136,10 @@ class RAGService:
 
         total_start = perf_counter()
 
-        summary_mode = self._is_summary_request(normalized_question)
+        summary_mode = (
+            self._is_summary_request(normalized_question)
+            or bool(self.REQUESTED_COUNT_PATTERN.search(normalized_question))
+        )
         retrieve_document = getattr(
             self.retrieval_service,
             "retrieve_document",
@@ -330,6 +339,9 @@ class RAGService:
             "",
             normalized,
         ).strip()
+        # Explicit source tokens cannot be confused with numbered questions
+        # from an uploaded document. Convert them only at the output boundary.
+        normalized = cls.EXPLICIT_SOURCE_PATTERN.sub(r"[\1]", normalized)
 
         # Remove one outer pair of square brackets when the model
         # wraps an entire answer that already contains a citation.
@@ -398,6 +410,7 @@ class RAGService:
                 (
                     f'<retrieved_document source="{index}">\n'
                     f"Filename: {chunk.filename}\n"
+                    f"Citation token: ⟦SRC:{index}⟧\n"
                     f"Internal chunk identifier (not a citation): {chunk.chunk_id}\n"
                     f"<document_content>\n"
                     f"{chunk.text}\n"
