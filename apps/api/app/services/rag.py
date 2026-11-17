@@ -1,6 +1,6 @@
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
 
 from app.services.llm import LLMService
@@ -41,6 +41,10 @@ class RAGResponse:
 
 
 class RAGService:
+    # Conservative character budget for local 3B models; this is not a
+    # tokenizer-based guarantee, but prevents unbounded prompt construction.
+    MAX_CONTEXT_CHARS = 24_000
+    MAX_CONTEXT_CHUNKS = 20
     CITATION_PATTERN = re.compile(r"\[(\d+)\]")
     SUMMARY_REQUEST_PATTERN = re.compile(
         r"\b(?:summari[sz](?:e|es|ed|ing|ation)?|summary|"
@@ -83,6 +87,37 @@ class RAGService:
         self.retrieval_service = retrieval_service
         self.llm_service = llm_service
 
+    @classmethod
+    def _select_context_chunks(
+        cls,
+        chunks: list[RetrievedChunk],
+        summary_mode: bool,
+    ) -> list[RetrievedChunk]:
+        """Cap source text and select evenly spaced sections for summaries.
+
+        Chunk IDs and citation ordering remain consistent with the evidence
+        actually passed to the model, including the correction prompt.
+        """
+        if not chunks:
+            return []
+
+        count = min(len(chunks), cls.MAX_CONTEXT_CHUNKS)
+        if summary_mode and len(chunks) > count and count > 1:
+            # Preserve beginning, ending, and representative middle sections.
+            indices = [
+                (index * (len(chunks) - 1)) // (count - 1)
+                for index in range(count)
+            ]
+            selected = [chunks[index] for index in indices]
+        else:
+            selected = chunks[:count]
+
+        per_chunk_chars = max(1, cls.MAX_CONTEXT_CHARS // len(selected))
+        return [
+            replace(chunk, text=chunk.text[:per_chunk_chars])
+            for chunk in selected
+        ]
+
     def answer(
         self,
         question: str,
@@ -112,7 +147,10 @@ class RAGService:
                 limit=top_k,
             )
 
-        chunks = retrieval_result.chunks
+        chunks = self._select_context_chunks(
+            retrieval_result.chunks,
+            summary_mode=summary_mode,
+        )
         prompt_build_ms = 0.0
         llm_ms = 0.0
 
