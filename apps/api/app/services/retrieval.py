@@ -220,7 +220,7 @@ class RetrievalService:
                 and point.payload.get("chunk_id") is not None
             }
             seen_chunk_ids: set[int] = set()
-            for point in self.vector_store.iter_points():
+            for point in self.vector_store.iter_points(document_id=target_document_id):
                 payload = point.payload or {}
                 if str(payload.get("document_id", "")) != target_document_id:
                     continue
