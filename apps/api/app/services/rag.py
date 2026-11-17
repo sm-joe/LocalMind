@@ -156,8 +156,16 @@ class RAGService:
                 limit=top_k,
             )
 
+        # Normal Q&A should pass only the requested top-k evidence into the
+        # prompt, even if a retrieval adapter returns a wider candidate set.
+        # Whole-document extraction retains its separate bounded budget.
+        context_candidates = (
+            retrieval_result.chunks
+            if summary_mode
+            else retrieval_result.chunks[:top_k if top_k is not None else 5]
+        )
         chunks = self._select_context_chunks(
-            retrieval_result.chunks,
+            context_candidates,
             summary_mode=summary_mode,
         )
         prompt_build_ms = 0.0
