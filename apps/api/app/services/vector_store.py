@@ -335,6 +335,7 @@ class VectorStore:
 
         self.client.delete(
             collection_name=self.collection_name,
+            wait=True,
             points_selector=models.FilterSelector(
                 filter=models.Filter(
                     must=[
