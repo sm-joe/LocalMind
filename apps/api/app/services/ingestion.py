@@ -67,8 +67,15 @@ class IngestionService:
             )
         try:
             if claim.previous_document_id is not None:
-                # Stale/failed attempt may have left partial Qdrant chunks.
-                self.vector_store.delete_document(claim.previous_document_id)
+                # A parse/embedding failure may predate collection creation.
+                collections = self.vector_store.client.get_collections()
+                if any(
+                    item.name == self.vector_store.collection_name
+                    for item in collections.collections
+                ):
+                    self.vector_store.delete_document(
+                        claim.previous_document_id
+                    )
             result = self._ingest_document(
                 path, content_type, original_filename,
                 document_id=claim.document_id,
