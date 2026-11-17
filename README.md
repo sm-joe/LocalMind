@@ -78,6 +78,12 @@ LocalRAG focuses on those boundaries:
 ---
 
 
+## Milestone verification
+
+Each development milestone includes Windows PowerShell checks, expected results,
+and guidance on distinguishing PR CI from live Docker acceptance testing.
+See [Milestone testing runbook](docs/MILESTONE_TESTING.md).
+
 ## Backups and evaluation
 
 A local backup utility captures a PostgreSQL custom-format dump and a Qdrant
