@@ -280,14 +280,26 @@ jobs:
           cache-from: type=gha,scope=localrag-web
           cache-to: type=gha,scope=localrag-web,mode=max
 
+      # Enforce the vulnerability gate in a readable format.
       - name: Scan Web Image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: "v0.75.0"
+          image-ref: localrag-web:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      # SARIF export is reporting-only; the scan above is the security gate.
+      - name: Generate Web SARIF Report
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: "v0.75.0"
           image-ref: localrag-web:ci
           format: sarif
           output: trivy-web-results.sarif
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
