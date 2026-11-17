@@ -189,8 +189,11 @@ jobs:
 
   docker-build:
     name: Docker Build
+    # Temporarily skip heavy container builds/scans on all pull requests.
+    # Keep them on main pushes and for an explicit workflow_dispatch run.
     if: |
-      needs.changes.outputs.docker == 'true' &&
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'workflow_dispatch' || needs.changes.outputs.docker == 'true') &&
       (
         needs.gitleaks.result == 'success' ||
         needs.gitleaks.result == 'skipped'
