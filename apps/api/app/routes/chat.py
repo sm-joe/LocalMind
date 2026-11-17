@@ -88,6 +88,7 @@ def create_rag_service() -> RAGService:
         vector_store=vector_store,
         top_k=5,
         score_threshold=0.40,
+        lexical_weight=0.15,
     )
 
     llm_service = LLMService(
