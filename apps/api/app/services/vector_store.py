@@ -173,8 +173,11 @@ class VectorStore:
     def iter_points(
         self,
         limit: int = 100,
+        document_id: str | None = None,
     ) -> Iterator[Any]:
-        """Yield Qdrant points page by page."""
+        """Yield paginated points, optionally filtered server-side by document ID."""
+        if document_id is not None and not document_id.strip():
+            raise ValueError("Document ID cannot be empty.")
         if limit <= 0:
             raise ValueError(
                 "Limit must be greater than zero."
@@ -188,6 +191,14 @@ class VectorStore:
                 "with_payload": True,
                 "with_vectors": False,
             }
+
+            if document_id is not None:
+                scroll_arguments["scroll_filter"] = models.Filter(
+                    must=[models.FieldCondition(
+                        key="document_id",
+                        match=models.MatchValue(value=document_id),
+                    )]
+                )
 
             if offset is not None:
                 scroll_arguments["offset"] = offset
