@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import uuid
 from pathlib import Path
 
@@ -8,6 +9,8 @@ from app.services.chunker import chunk_text
 from app.services.embeddings import EmbeddingService
 from app.services.parser import parse_document
 from app.services.vector_store import VectorStore
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionResult:
@@ -160,7 +163,20 @@ class IngestionService:
                 )
             )
 
-        self.vector_store.upsert(points)
+        # A transport/server error may occur after Qdrant has persisted some
+        # points. Never leave a partially indexed document that could be
+        # mistaken for a successfully completed duplicate on the next upload.
+        try:
+            self.vector_store.upsert(points)
+        except Exception:
+            try:
+                self.vector_store.delete_document(document_id)
+            except Exception:
+                logger.exception(
+                    "Could not roll back partial indexing for document_id=%s",
+                    document_id,
+                )
+            raise
 
         return IngestionResult(
             document_id=document_id,
