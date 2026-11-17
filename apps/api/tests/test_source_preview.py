@@ -6,6 +6,7 @@ from qdrant_client.http import models
 
 import app.routes.documents as documents
 from app.main import app
+from app.auth import require_api_key
 from app.services.vector_store import VectorStore
 
 
@@ -34,7 +35,11 @@ def test_preview_returns_exact_document_chunk(monkeypatch):
         "text": "Only this cited passage.", "start_char": 42, "end_char": 66,
     }
     monkeypatch.setattr(documents, "create_vector_store", lambda: store)
-    response = TestClient(app).get("/documents/abc/chunks/3")
+    app.dependency_overrides[require_api_key] = lambda: None
+    try:
+        response = TestClient(app).get("/documents/abc/chunks/3")
+    finally:
+        app.dependency_overrides.pop(require_api_key, None)
     assert response.status_code == 200
     assert response.json()["text"] == "Only this cited passage."
     store.get_document_chunk.assert_called_once_with("abc", 3)
