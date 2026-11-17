@@ -48,7 +48,7 @@ class RAGService:
     CITATION_PATTERN = re.compile(r"\[(\d+)\]")
     EXPLICIT_SOURCE_PATTERN = re.compile(r"⟦SRC:(\d+)⟧")
     REQUESTED_COUNT_PATTERN = re.compile(
-        r"\b(?:list|name|identify|give|show)\s+(?:the\s+)?(?:top\s+)?(\d{1,3})\s+"
+        r"\b(?:list|extract|name|identify|give|show)\s+(?:the\s+)?(?:top\s+)?(\d{1,3})\s+"
         r"(?:\w+\s+){0,3}?(?:services|tools|items|examples|features|products|resources)\b",
         re.IGNORECASE,
     )
@@ -136,9 +136,10 @@ class RAGService:
 
         total_start = perf_counter()
 
+        requested_count_match = self.REQUESTED_COUNT_PATTERN.search(normalized_question)
         summary_mode = (
             self._is_summary_request(normalized_question)
-            or bool(self.REQUESTED_COUNT_PATTERN.search(normalized_question))
+            or bool(requested_count_match)
         )
         retrieve_document = getattr(
             self.retrieval_service,
@@ -148,7 +149,10 @@ class RAGService:
         if summary_mode and callable(retrieve_document):
             retrieval_result = retrieve_document(
                 normalized_question,
-                limit=top_k,
+                limit=(
+                    max(top_k or 0, min(int(requested_count_match.group(1)) + 6, 100))
+                    if requested_count_match else top_k
+                ),
             )
         else:
             # Support retrieval adapters which expose an explicitly named
@@ -253,15 +257,11 @@ class RAGService:
             # indexed passages, each with its actual source citation.
             if (
                 answer == self.INVALID_CITATION_ANSWER
-                and self.REQUESTED_COUNT_PATTERN.search(normalized_question)
+                and requested_count_match
             ):
                 answer = self._verbatim_excerpts(
                     chunks=chunks,
-                    requested_count=int(
-                        self.REQUESTED_COUNT_PATTERN.search(
-                            normalized_question
-                        ).group(1)
-                    ),
+                    requested_count=int(requested_count_match.group(1)),
                 )
 
         sources = [
@@ -323,7 +323,7 @@ class RAGService:
             excerpt = " ".join(chunk.text.split())[:300].strip()
             if excerpt:
                 lines.append(f'{number}. "{excerpt}" [{number}]')
-        return "\\n".join(lines) if lines else cls.INVALID_CITATION_ANSWER
+        return ("Relevant verbatim excerpts:\n" + "\n".join(lines)) if lines else cls.INVALID_CITATION_ANSWER
 
     @classmethod
     def _is_summary_request(cls, question: str) -> bool:
@@ -560,6 +560,7 @@ SECURITY RULES
 {summary_requirements}
 ANSWERING RULES
 - Answer the user's question directly and concisely.
+- For ordinary questions, prefer a clear answer with usually 3-6 bullets when useful; avoid unnecessary filler.
 - Use the retrieved documents as the source of truth.
 - Do not invent facts, quotations, or citations.
 - If the documents do not support an answer, clearly state that there is insufficient information.
