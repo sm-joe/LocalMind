@@ -129,15 +129,15 @@ docker compose exec api pytest -q tests/test_source_preview.py
 Pause uploads and chat writes while backing up:
 
 ~~~bash
-python3 scripts/backup_localrag.py --output backups
+python3 scripts/backup_localmind.py --output backups
 latest_backup=$(find backups -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)
-test -n "$latest_backup" && python3 scripts/backup_localrag.py --verify "$latest_backup"
+test -n "$latest_backup" && python3 scripts/backup_localmind.py --verify "$latest_backup"
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 python3 -m unittest discover -s evals/tests -p 'test_*.py'
 docker compose exec api pytest -q
 ~~~
 
-The backup script retains its historical filename. Encrypt backup output and validate a real restore. Do not mistake a SHA-256 integrity check for a disaster-recovery acceptance test.
+The LocalMind command uses a backward-compatible implementation that retains legacy storage identifiers. Encrypt backup output and validate a real restore. Do not mistake a SHA-256 integrity check for a disaster-recovery acceptance test.
 
 ## CI Versus Runtime Proof
 
