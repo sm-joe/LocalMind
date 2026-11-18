@@ -1,202 +1,164 @@
-# LocalRAG milestone verification — Windows PowerShell
+# LocalMind — Bash Acceptance And Milestone Testing
 
-These commands verify a **running local Docker installation**, not just CI. Run them
-from the repository root. The features below are on stacked PR branches until
-merged into `main`. Before running, use the branch containing the feature under
-test (the latest branch includes its ancestors).
+This runbook validates a **live Docker Compose installation**, not merely GitHub Actions. Commands use Bash (Linux, macOS or WSL), GNU-compatible curl and Python 3. Run from your repository root.
 
-## Prerequisites and startup
+> Never paste passwords or API keys into shell history, chat transcripts, CI logs or issue comments. Never use docker compose down -v unless intentionally deleting persistent data.
 
-```powershell
-git status
-Copy-Item .env.example .env   # Only if .env does not already exist
-notepad .env
-```
+## Prepare The Environment
 
-Set **distinct, private** `POSTGRES_PASSWORD`, `LOCALRAG_API_KEY` (32+ characters),
-`LOCALRAG_ADMIN_PASSWORD` (12+ characters), and
-`LOCALRAG_SESSION_SECRET` (32+ characters) in `.env`. Never commit this file.
-To generate high-entropy secrets on Windows:
+~~~bash
+git status --short
+cp -n .env.example .env
+python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+~~~
 
-```powershell
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-```
+Set distinct secrets in .env: POSTGRES_PASSWORD, LOCALRAG_API_KEY (32+ characters), LOCALRAG_ADMIN_PASSWORD (12+ characters), and LOCALRAG_SESSION_SECRET (32+ characters). The LOCALRAG_* keys remain for runtime backwards compatibility after branding becomes LocalMind.
 
-Repeat for the API key, admin password, and session secret. Never paste a
-production secret into chat, CI logs, or a GitHub issue. Check/start services:
-
-```powershell
+~~~bash
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps
-Invoke-RestMethod http://127.0.0.1:8000/health
-Invoke-RestMethod http://127.0.0.1:8000/ready
-```
+curl -fsS http://127.0.0.1:8000/health
+curl -fsS http://127.0.0.1:8000/ready
+~~~
 
-**Expected:** Compose config is valid; services become healthy; health status is
-`ok` and readiness status is `ready` once Ollama models are installed. The
-initial model download can require an internet connection. This build is **local
-and explicit**; PR CI deliberately skips its separate Docker image build job.
+Expected: healthy services, status ok, and readiness ready once Ollama provisioning is complete. First-start readiness can return HTTP 503 while models are downloading.
 
-For API tests: enter a private key at the prompt (do not print it):
+## Authentication And API Access
 
-```powershell
-$apiKey = Read-Host "Enter LOCALRAG_API_KEY from .env"
-$headers = @{ "X-API-Key" = $apiKey }
-```
+Read the API key and login password without printing them to the terminal:
 
-## Milestone 1 — Authentication and API access control (PR #15)
+~~~bash
+read -r -s -p 'API Key: ' API_KEY; printf '\n'
+read -r -s -p 'Administrator Password: ' ADMIN_PASSWORD; printf '\n'
+~~~
 
-```powershell
-# Unauthenticated business endpoints should reject the request.
-try {
-    Invoke-WebRequest http://127.0.0.1:8000/documents -ErrorAction Stop
-    throw "FAIL: missing API key was accepted"
-} catch {
-    if ($_.Exception.Response.StatusCode.value__ -ne 401) { throw }
-    "PASS: unauthenticated document request rejected with 401"
-}
+Unauthenticated calls must be rejected:
 
-# Authenticated requests should work.
-Invoke-RestMethod http://127.0.0.1:8000/documents -Headers $headers
+~~~bash
+curl -sS -o /dev/null -w 'Unauthenticated HTTP %{http_code}\n' http://127.0.0.1:8000/documents
+curl -fsS -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/documents
+~~~
 
-# Same-origin web login establishes an HttpOnly session.
-$adminPassword = Read-Host "Enter LOCALRAG_ADMIN_PASSWORD from .env"
-$login = Invoke-RestMethod -Uri http://127.0.0.1:3000/api/auth/login `
-    -Method Post -ContentType "application/json" `
-    -Headers @{ Origin = "http://127.0.0.1:3000" } `
-    -Body (@{ password = $adminPassword } | ConvertTo-Json) `
-    -SessionVariable webSession
-$login
-Invoke-RestMethod http://127.0.0.1:3000/api/auth/session -WebSession $webSession
-Invoke-RestMethod http://127.0.0.1:3000/api/backend/documents -WebSession $webSession
-```
+Expected: first response HTTP 401; second response returns the document collection.
 
-**Expected:** unauthenticated API request returns 401; authenticated API returns
-`documents`; login/session responses report `authenticated: true`; proxied
-document listing works. Manually visit http://localhost:3000: the application
-must show sign-in before the chatbot workspace. In a fresh private/incognito
-window without the session, the API proxy must reject access.
+Verify the signed web session with curl's cookie jar:
 
-**Important:** Current auth protects one local instance. It is **not** per-user
-or per-document multi-tenant authorization. Do not expose publicly without
-HTTPS, brute-force/rate-limiting defenses, and additional hardening.
+~~~bash
+cookie_jar=$(mktemp)
+curl -fsS -c "$cookie_jar" -H 'Origin: http://localhost:3000' \
+  -H 'Content-Type: application/json' \
+  --data "$(ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 -c 'import json,os; print(json.dumps({"password":os.environ["ADMIN_PASSWORD"]}))')" \
+  http://localhost:3000/api/auth/login
+curl -fsS -b "$cookie_jar" http://localhost:3000/api/auth/session
+curl -fsS -b "$cookie_jar" http://localhost:3000/api/backend/documents
+rm -f "$cookie_jar"
+~~~
 
-## Milestone 2 — Document ingestion states and recovery (PR #18)
+Expected: authenticated true, an HttpOnly session cookie, and accessible proxied documents. The application is **single-user**, not tenant-isolated.
 
-Create a safe temporary test file and upload twice:
+## Document Upload, Deduplication And Indexing
 
-```powershell
-"LocalRAG verifies resumable retry states, citations, and document deduplication." |
-    Set-Content -Encoding utf8 .\milestone-test.txt
-$first = curl.exe -sS -H "X-API-Key: $apiKey" `
-    -F "file=@milestone-test.txt;type=text/plain" `
-    http://127.0.0.1:8000/documents/upload | ConvertFrom-Json
-$first
-$duplicate = curl.exe -sS -H "X-API-Key: $apiKey" `
-    -F "file=@milestone-test.txt;type=text/plain" `
-    http://127.0.0.1:8000/documents/upload | ConvertFrom-Json
-$duplicate
-Invoke-RestMethod "http://127.0.0.1:8000/documents/status/$($first.document_id)" `
-    -Headers $headers
-```
+Create a harmless fixture and upload it:
 
-**Expected:** initial upload returns `indexed`, duplicate returns
-`already_indexed` with the same `document_id`, and status returns `ready`
-with a positive `chunks` count. For active concurrent uploads of identical
-bytes, the second request should receive HTTP 409. A failed ingest can be
-retried by uploading the file again. This does **not** imply persisted upload
-bytes or automatic background resumption.
+~~~bash
+printf 'LocalMind Tests Document Retrieval, Citations, And Duplicate Indexing.\n' > milestone-test.txt
+first=$(curl -fsS -H "X-API-Key: $API_KEY" \
+  -F 'file=@milestone-test.txt;type=text/plain' \
+  http://127.0.0.1:8000/documents/upload)
+printf '%s\n' "$first" | python3 -m json.tool
+doc_id=$(printf '%s' "$first" | python3 -c 'import json,sys; print(json.load(sys.stdin)["document_id"])')
+curl -fsS -H "X-API-Key: $API_KEY" \
+  -F 'file=@milestone-test.txt;type=text/plain' \
+  http://127.0.0.1:8000/documents/upload | python3 -m json.tool
+curl -fsS -H "X-API-Key: $API_KEY" \
+  "http://127.0.0.1:8000/documents/status/$doc_id" | python3 -m json.tool
+~~~
 
-To verify deletion (only the new test file):
+Expected: initial upload indexed, duplicate already_indexed, and a ready document record with a nonzero chunk count. A parallel conflicting upload may return HTTP 409. The server does not persist every uploaded file as a reusable original.
 
-```powershell
-Invoke-RestMethod -Method Delete `
-    "http://127.0.0.1:8000/documents/$($first.document_id)" -Headers $headers
-Remove-Item .\milestone-test.txt
-```
+Delete only the test fixture:
 
-**Expected:** response status `deleted`; the test document disappears from
-the listing and its registry record is cleared. Do not delete real documents.
+~~~bash
+curl -fsS -X DELETE -H "X-API-Key: $API_KEY" \
+  "http://127.0.0.1:8000/documents/$doc_id"
+rm -f milestone-test.txt
+~~~
 
-## Milestone 3 — Retrieval relevance (PR #20)
+## Retrieval, Citations And Hallucination Acceptance
 
-```powershell
-docker compose exec api pytest -q tests/test_lexical_reranking.py `
-    tests/test_retrieval.py tests/test_rag.py
-```
+~~~bash
+docker compose exec api pytest -q tests/test_retrieval.py tests/test_lexical_reranking.py tests/test_comparison_qa.py tests/test_named_entity_qa.py tests/test_rag_streaming.py
+~~~
 
-**Expected:** tests pass, proving lexical reranking can improve the order of
-dense-search candidates and original Qdrant similarity scores are preserved.
-For live quality, upload the fixture and run the authenticated evaluation:
+Upload your actual document first, then audit stored mentions without mutating Qdrant:
 
-```powershell
-$env:LOCALRAG_API_KEY = $apiKey
-$env:LOCALRAG_EVAL_API_URL = "http://127.0.0.1:8000/chat"
-python .\evals\run_evaluation.py
-Remove-Item Env:LOCALRAG_API_KEY
-```
+~~~bash
+docker compose exec api python -m app.tools.index_audit Interview_Questions.docx EC2 IAM Bedrock
+~~~
 
-**Expected:** per-case retrieval/concept/citation scores and an evaluation
-JSON output. Evaluation can fail until the expected fixture document has been
-uploaded. This is **lexical-aware reranking**, not native sparse+dense hybrid
-search or a tokenizer-exact context budget.
+If the indexed document has EC2 and IAM passages but no Bedrock mention, the expected behavior is:
 
-## Milestone 4 — Chat UX and source previews (PR #16)
+1. **Compare EC2 And IAM:** retrieve relevant evidence for both subjects, preferably definition passages; do not invent unsupported differences.
+2. **What Is Amazon Bedrock Mentioned In The Document?:** explicitly say there is no indexed evidence; do not answer from pretrained knowledge or make up citations.
+3. **Summarize The Document:** synthesize the document's major sections. If inline summary citations are absent, don't claim that individual statements have been verified.
+4. **Inspect Sources:** use the UI's Read Original Passage action to verify retrieved text and citation mapping.
 
-After uploading a document, use the signed-in web UI at
-http://localhost:3000 and ask a question grounded in it. Click
-**Read source passage** on the right evidence panel.
+These acceptance criteria require real Ollama and the actual indexed data. Passing mock-based tests is not sufficient proof.
 
-To verify directly against an indexed chunk:
+## Research UI And Source Inspection
 
-```powershell
-# Set $docId to a document_id returned by /documents/upload.
-$docId = Read-Host "Enter indexed document_id"
-Invoke-RestMethod `
-    "http://127.0.0.1:8000/documents/$docId/chunks/0" `
-    -Headers $headers
+1. Visit http://localhost:3000 in a private browser window; check the **LocalMind** sign-in page.
+2. Sign in, confirm **Documents** loads as the default dashboard and files/search/filters are visible.
+3. Choose **Ask Questions** for an indexed document. Confirm the **Research** page opens, with the selected source and an independent source inspector.
+4. Send a question and check streaming, final answer, source citations and **Read Original Passage**.
+5. Use **Conversations** to test resume, rename, archive, restore and delete.
+6. Test the layout at narrow desktop and mobile browser sizes; review overflow, keyboard focus and accessibility.
+
+API source preview example:
+
+~~~bash
+read -r -p 'Indexed Document ID: ' DOC_ID
+curl -fsS -H "X-API-Key: $API_KEY" \
+  "http://127.0.0.1:8000/documents/$DOC_ID/chunks/0"
 docker compose exec api pytest -q tests/test_source_preview.py
-```
+~~~
 
-**Expected:** authenticated API returns the indexed `text`, `filename`,
-`chunk_id`, `start_char`, `end_char` for the specified source; the UI
-displays the passage without interpreting it as HTML. Nonexistent chunks return
-404. Streaming token responses are **not yet implemented**.
+## Persistence And Backup
 
-## Milestone 5 — Backup integrity, evaluation and release checks (PR #21)
+Pause uploads and chat writes while backing up:
 
-Pause document uploads and chat writes for a consistent backup.
-
-```powershell
-python .\scripts\backup_localrag.py --output .\backups
-$latest = Get-ChildItem .\backups -Directory |
-    Sort-Object LastWriteTime -Descending | Select-Object -First 1
-python .\scripts\backup_localrag.py --verify $latest.FullName
-python -m unittest discover -s scripts/tests -p "test_*.py"
-python -m unittest discover -s evals/tests -p "test_*.py"
+~~~bash
+python3 scripts/backup_localrag.py --output backups
+latest_backup=$(find backups -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)
+test -n "$latest_backup" && python3 scripts/backup_localrag.py --verify "$latest_backup"
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+python3 -m unittest discover -s evals/tests -p 'test_*.py'
 docker compose exec api pytest -q
+~~~
+
+The backup script retains its historical filename. Encrypt backup output and validate a real restore. Do not mistake a SHA-256 integrity check for a disaster-recovery acceptance test.
+
+## CI Versus Runtime Proof
+
+GitHub Actions verifies source checks and build jobs on eligible branches; some integration, image and security jobs may be skipped. Manual verification of full-stack Docker operation, live Ollama quality, and recovery remains necessary.
+
+~~~bash
 docker compose ps
-```
+docker compose logs --tail=120 api web ollama postgres qdrant
+~~~
 
-**Expected:** backup contains `postgres.dump`, `qdrant.snapshot`,
-and `manifest.json`; integrity verification and deterministic tests pass;
-API tests pass and services remain healthy. The backup directory contains
-**private** documents and conversations — encrypt it before transferring
-off-machine. Backups are not cross-database atomic, and the **restore drill
-has not been verified**.
+After the GitHub rename, the workflow will appear under **Actions → LocalMind CI Pipeline**. Update your Git remote rather than relying indefinitely on GitHub redirect behavior:
 
-## Run the heavyweight image-security gate only when needed
+~~~bash
+git remote set-url origin https://github.com/sm-joe/localmind.git
+git remote -v
+~~~
 
-Pull requests skip the separate Docker Build job. To run it on demand:
-GitHub repository **Actions → LocalRAG CI Pipeline → Run workflow**. The same
-image build and Trivy HIGH/CRITICAL checks remain active for relevant pushes
-to `main`. A passing PR is **not** proof of a passing container vulnerability
-scan or live end-to-end behavior; run those before merging a release candidate.
+## Cleanup
 
-When testing is complete, do not destroy your persisted data with
-`docker compose down -v`. For a normal shutdown use:
+~~~bash
+unset API_KEY ADMIN_PASSWORD DOC_ID
+~~~
 
-```powershell
-docker compose down
-```
+**Do not use docker compose down -v while retaining saved documents or conversations.**
