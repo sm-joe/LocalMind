@@ -6,9 +6,13 @@ class LLMService:
         self,
         base_url: str,
         model: str,
+        num_ctx: int = 6144,
     ) -> None:
+        if num_ctx < 2048:
+            raise ValueError("Ollama context must be at least 2048 tokens.")
         self.client = Client(host=base_url)
         self.model = model
+        self.num_ctx = num_ctx
 
     def generate(
         self,
@@ -23,7 +27,7 @@ class LLMService:
             model=self.model,
             # Retrieval prompts contain multiple source passages and citation
             # markers. Ollama's default context may truncate those passages.
-            options={"num_ctx": 8192},
+            options={"num_ctx": self.num_ctx},
             messages=[
                 {
                     "role": "user",
