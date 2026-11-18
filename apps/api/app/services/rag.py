@@ -326,8 +326,8 @@ class RAGService:
         requested_count_match = self.REQUESTED_COUNT_PATTERN.search(normalized)
         document_wide = summary or bool(requested_count_match)
         comparison = re.search(
-            r"\\b(?:difference between|compare)\\s+([a-z0-9-]+)\\s+"
-            r"(?:and|vs\\.?|versus)\\s+([a-z0-9-]+)\\b",
+            r"\b(?:difference between|compare)\s+([a-z0-9-]+)\s+"
+            r"(?:and|vs\.?|versus)\s+([a-z0-9-]+)\b",
             normalized, re.IGNORECASE,
         )
         retrieval = self.retrieval_service
