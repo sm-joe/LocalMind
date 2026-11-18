@@ -151,4 +151,45 @@ def test_summary_without_citation_keeps_actual_synthesis_not_chopped_excerpts():
     response = events[-1][1]
     assert "The interview guide explains architecture" in response.answer
     assert "Relevant verbatim excerpts" not in response.answer
-    assert "Unverified answer" in response.answer
+    assert "Unverified answer" not in response.answer
+    assert "individual summary statements do not have verified inline citations" in response.answer
+    assert len(response.sources) == 12
+
+
+def test_uncited_document_summary_is_not_presented_as_fully_verified():
+    class Retrieval:
+        def retrieve_document(self, query, limit=None):
+            return corpus(12)
+
+    class LLM:
+        def stream(self, prompt):
+            yield "This document covers AWS interview preparation, IAM and EC2."
+
+    events = list(RAGService(Retrieval(), LLM()).stream_answer(
+        "Summarize the document."
+    ))
+    result = events[-1][1]
+    assert result.answer.startswith(
+        "This document covers AWS interview preparation"
+    )
+    assert "Unverified answer (citation or source validation failed)" not in result.answer
+    assert "do not have verified inline citations" in result.answer
+    assert len(result.sources) == 12
+
+
+def test_absent_named_service_cannot_be_generated_from_general_knowledge():
+    class Retrieval:
+        def retrieve_named_entity(self, query, entity, limit):
+            assert entity == "Amazon Bedrock"
+            return corpus(0)
+
+    class LLM:
+        def stream(self, prompt):
+            raise AssertionError("Model must not run without matching indexed passages.")
+
+    events = list(RAGService(Retrieval(), LLM()).stream_answer(
+        "What is Amazon Bedrock service mentioned in the document?"
+    ))
+    result = events[-1][1]
+    assert result.sources == []
+    assert "not mentioned in the indexed document text" in result.answer
