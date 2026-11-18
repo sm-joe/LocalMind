@@ -643,7 +643,7 @@ def main() -> int:
     print(
         "========================================"
     )
-    print("LocalRAG Evaluation")
+    print("LocalMind Evaluation")
     print(
         "========================================"
     )
