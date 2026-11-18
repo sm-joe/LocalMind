@@ -1085,7 +1085,7 @@ export default function Home() {
                 and follow every answer back to its source.
               </p>
             </div>
-            <div className="auth-document-preview" aria-label="Illustration of the LocalRAG document reading workflow">
+            <div className="auth-document-preview" aria-label="Illustration of the LocalMind document reading workflow">
               <div className="auth-preview-head">
                 <span>THE READING DESK</span>
                 <span>ANATOMY OF AN ANSWER / 01</span>
