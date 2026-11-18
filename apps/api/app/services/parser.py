@@ -99,6 +99,8 @@ def _parse_pdf(path: Path) -> str:
 
 def _parse_docx(path: Path) -> str:
     from docx import Document
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
 
     try:
         document = Document(path)
@@ -108,13 +110,36 @@ def _parse_docx(path: Path) -> str:
                 "DOCX document contains too many paragraphs."
             )
 
-        paragraphs = [
-            paragraph.text
-            for paragraph in document.paragraphs
-            if paragraph.text.strip()
-        ]
+        # document.paragraphs silently omits all content inside Word tables.
+        # Read both paragraphs and tables in their true body order, including
+        # tables containing interview questions and their answers.
+        sections: list[str] = []
+        for block in document.iter_inner_content():
+            if isinstance(block, Paragraph):
+                if block.text.strip():
+                    sections.append(block.text)
+            elif isinstance(block, Table):
+                for row in block.rows:
+                    # Preserve paired question/answer columns and avoid
+                    # emitting duplicate text for horizontally merged cells.
+                    cells: list[str] = []
+                    seen_cells: set[int] = set()
+                    for cell in row.cells:
+                        cell_identity = id(cell._tc)
+                        if cell_identity in seen_cells:
+                            continue
+                        seen_cells.add(cell_identity)
+                        text = " ".join(
+                            paragraph.text.strip()
+                            for paragraph in cell.paragraphs
+                            if paragraph.text.strip()
+                        )
+                        if text:
+                            cells.append(text)
+                    if cells:
+                        sections.append(" | ".join(cells))
 
-        return "\n\n".join(paragraphs)
+        return "\n\n".join(sections)
 
     except ValueError:
         raise
@@ -123,7 +148,6 @@ def _parse_docx(path: Path) -> str:
         raise ValueError(
             "The DOCX document could not be parsed."
         ) from exc
-
 
 def _parse_text(path: Path) -> str:
     try:
