@@ -41,6 +41,13 @@ $alreadyConnected = $network -in $currentNetworks
 $addedHere = $false
 
 try {
+    # The stock ollama-init image writes the shared volume as root, while
+    # localrag-ollama serves as UID 10001. Repair existing ownership with a
+    # disposable root init container; never delete or recreate the volume.
+    docker compose run --rm --no-deps --entrypoint /bin/sh ollama-init -c 'chown -R 10001:10001 /opt/ollama-models'
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not repair ownership of the Ollama model volume.'
+    }
     if (-not $alreadyConnected) {
         docker network connect $network $container
         if ($LASTEXITCODE -ne 0) {
