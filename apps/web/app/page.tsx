@@ -691,7 +691,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     <main className="app-shell">
       <section className="workspace">
         <header className="app-header product-header">
-          <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">L<span className="brand-mark-detail">/</span></span><span>localrag<span className="brand-mark-subtle"> / the reading desk</span></span></div>
+          <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">M<span className="brand-mark-detail">/</span></span><span>LocalMind<span className="brand-mark-subtle"> / the reading desk</span></span></div>
           <div className="header-actions"><span className="status-pill"><span className="status-dot" />On your device</span><button type="button" onClick={onLogout} className="header-signout">Sign out ↗</button></div>
         </header>
         <div className="workspace-intro">
@@ -914,7 +914,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                         <span className="source-status-icon" aria-hidden="true">i</span>
                         <div>
                           <strong>No indexed evidence available</strong>
-                          <p>LocalRAG could not retrieve passages for this question. Confirm the file was indexed successfully, then try again. Answers without evidence are not verified.</p>
+                          <p>LocalMind could not retrieve passages for this question. Confirm the file was indexed successfully, then try again. Answers without evidence are not verified.</p>
                         </div>
                       </div>
                     )}
@@ -923,7 +923,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                 {isLoading && (
                   <article className="message message-assistant">
                     <div className="message-label">READING YOUR SOURCES</div>
-                    <div className="typing-indicator" role="status" aria-label="LocalRAG is generating a response"><span /><span /><span /></div>
+                    <div className="typing-indicator" role="status" aria-label="LocalMind is generating a response"><span /><span /><span /></div>
                   </article>
                 )}
                 <div ref={messagesEndRef} aria-hidden="true" />
@@ -1061,7 +1061,7 @@ export default function Home() {
 
   if (authenticated === null) return (
     <main className="auth-loading" role="status" aria-live="polite">
-      <span className="brand-mark" aria-hidden="true">◆</span> Opening your private workspace…
+      <span className="brand-mark" aria-hidden="true">M<span className="brand-mark-detail">/</span></span> Opening LocalMind…
     </main>
   );
   if (!authenticated) return (
@@ -1069,14 +1069,14 @@ export default function Home() {
       <div className="auth-page-inner">
         <header className="auth-header">
           <div className="brand-lockup">
-            <span className="brand-mark" aria-hidden="true">L<span className="brand-mark-detail">/</span></span>
-            <span>localrag<span className="brand-mark-subtle"> / the reading desk</span></span>
+            <span className="brand-mark" aria-hidden="true">M<span className="brand-mark-detail">/</span></span>
+            <span>LocalMind<span className="brand-mark-subtle"> / the reading desk</span></span>
           </div>
           <span className="auth-header-label"><span className="status-dot" /> PRIVATE. LOCAL. YOURS.</span>
         </header>
 
         <div className="auth-layout">
-          <section className="auth-story" aria-label="About LocalRAG">
+          <section className="auth-story" aria-label="About LocalMind">
             <div className="auth-editorial-header">
               <p className="auth-kicker"><span>01 /</span> A HOME FOR YOUR KNOWLEDGE</p>
               <h1>Less searching.<br /><em>More finding.</em></h1>
@@ -1109,7 +1109,7 @@ export default function Home() {
               </div>
               <div className="auth-preview-bottom"><span>READ</span><span>QUESTION</span><span>TRACE</span></div>
             </div>
-            <div className="auth-steps" aria-label="How LocalRAG works">
+            <div className="auth-steps" aria-label="How LocalMind works">
               <div><span>01</span><div><strong>Collect</strong><p>PDF, Word, Markdown and plain text.</p></div></div>
               <div><span>02</span><div><strong>Explore</strong><p>Ask questions and connect ideas.</p></div></div>
               <div><span>03</span><div><strong>Verify</strong><p>Inspect the original passages.</p></div></div>
@@ -1119,16 +1119,16 @@ export default function Home() {
           <section className="auth-signin-zone" aria-labelledby="auth-title">
             <div className="auth-signin-topline"><span>YOUR PRIVATE WORKSPACE</span><span>ACCESS / 01</span></div>
             <div className="auth-card">
-              <div className="auth-card-icon" aria-hidden="true">L<span>/</span></div>
+              <div className="auth-card-icon" aria-hidden="true">M<span>/</span></div>
               <p className="eyebrow">WELCOME BACK</p>
               <h2 id="auth-title">Make yourself<br /><em>at home.</em></h2>
               <p className="auth-card-description">
                 Sign in to continue your research, documents and conversations.
               </p>
               <form onSubmit={(event) => void signIn(event)}>
-                <label htmlFor="localrag-password">Administrator password</label>
+                <label htmlFor="localmind-password">Administrator password</label>
                 <input
-                  id="localrag-password"
+                  id="localmind-password"
                   type="password"
                   autoComplete="current-password"
                   placeholder="Enter your password"
@@ -1153,7 +1153,7 @@ export default function Home() {
         </div>
 
         <footer className="auth-footer">
-          <span>LOCALRAG / THE READING DESK</span>
+          <span>LOCALMIND / THE READING DESK</span>
           <span>DOCUMENTS IN. CLARITY OUT.</span>
         </footer>
       </div>
