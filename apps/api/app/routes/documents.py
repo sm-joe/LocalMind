@@ -3,7 +3,7 @@ import zipfile
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from app.config import get_settings
@@ -278,6 +278,7 @@ def _validate_file_content(
 )
 async def upload_document(
     file: UploadFile = File(...),
+    reindex: bool = Query(default=False),
 ) -> DocumentUploadResponse:
     if not file.filename:
         raise HTTPException(
@@ -335,6 +336,7 @@ async def upload_document(
             content_type=file.content_type
             or "application/octet-stream",
             original_filename=original_filename,
+            **({"force_reindex": True} if reindex else {}),
         )
 
         status = (
