@@ -682,7 +682,7 @@ A retrieval change should be evaluated against this baseline rather than judged 
 # Repository Layout
 
 ```text
-localrag/
+LocalMind/
 ├── apps/
 │   ├── api/
 │   │   ├── app/
@@ -1146,7 +1146,7 @@ Avoid introducing infrastructure that does not improve the actual local use case
 | Alembic schema migrations | Complete |
 | Conversation API and idempotent chat retries | Complete |
 | Conversation history, restore, rename, archive, delete | Complete |
-| Slate UI refinements | Frozen baseline |
+| Document-first workspace and signed-session sign-in | Implemented; runtime acceptance pending |
 | FastAPI API | Complete |
 | Docker Compose runtime | Complete |
 | Qdrant integration | Complete |
