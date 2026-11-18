@@ -330,6 +330,11 @@ class RAGService:
             r"(?:and|vs\.?|versus)\s+([a-z0-9-]+)\b",
             normalized, re.IGNORECASE,
         )
+        named_entity = re.search(
+            r"\b(?:what is|explain|describe|define)\s+(?:the\s+)?"
+            r"((?:amazon|aws|google|azure)\s+[a-z][a-z0-9-]*)\b",
+            normalized, re.IGNORECASE,
+        )
         retrieval = self.retrieval_service
         if document_id:
             result = retrieval.retrieve_document_by_id(document_id, normalized)
@@ -339,13 +344,17 @@ class RAGService:
             result = retrieval.retrieve_comparison(
                 normalized, comparison.group(1), comparison.group(2), limit=4
             )
+        elif named_entity and hasattr(retrieval, "retrieve_named_entity"):
+            result = retrieval.retrieve_named_entity(
+                normalized, named_entity.group(1), limit=4
+            )
         else:
             result = retrieval.retrieve(normalized, limit=min(top_k, 3))
         # Broad document tasks must see the full source, not just the three
         # highest-matching chunks. Sample sections in source order within
         # a bounded CPU-friendly prompt.
         candidates = result.chunks
-        count = 12 if document_wide else (4 if comparison else 3)
+        count = 12 if document_wide else (4 if comparison or named_entity else 3)
         if document_wide and len(candidates) > count:
             indices = [
                 (i * (len(candidates) - 1)) // (count - 1)
@@ -357,9 +366,23 @@ class RAGService:
         per_chunk = max(
             1, (5400 if document_wide else 2400) // max(1, len(candidates))
         )
-        chunks = [
-            replace(chunk, text=chunk.text[:per_chunk]) for chunk in candidates
-        ]
+        # For an explicit entity, its definition can occur in the middle of
+        # a large DOCX chunk. Never cut that mention out of the prompt.
+        subject = named_entity.group(1) if named_entity and not document_wide else None
+        chunks = []
+        for chunk in candidates:
+            text = chunk.text
+            if subject and len(text) > per_chunk:
+                match = re.search(re.escape(subject), text, re.IGNORECASE)
+                if match:
+                    start = max(0, min(match.start() - per_chunk // 4,
+                                       len(text) - per_chunk))
+                    text = text[start:start + per_chunk]
+                else:
+                    text = text[:per_chunk]
+            else:
+                text = text[:per_chunk]
+            chunks.append(replace(chunk, text=text))
         sources = [
             RAGSource(
                 document_id=chunk.document_id,
@@ -442,7 +465,15 @@ class RAGService:
                     )
                 )
         else:
-            answer = self.NO_CONTEXT_ANSWER
+            if named_entity:
+                answer = (
+                    f"I couldn't find an exact mention of "
+                    f"{named_entity.group(1)} in the indexed document text. "
+                    "This does not prove the original file lacks the topic; "
+                    "the available indexed text may be incomplete."
+                )
+            else:
+                answer = self.NO_CONTEXT_ANSWER
         yield ("done", RAGResponse(
             answer=answer,
             sources=sources,
