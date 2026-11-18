@@ -12,7 +12,7 @@ from app.routes.documents import router as documents_router
 
 
 app = FastAPI(
-    title="LocalRAG API",
+    title="LocalMind API",
     version="0.2.0",
 )
 
