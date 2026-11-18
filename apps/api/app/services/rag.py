@@ -463,10 +463,9 @@ class RAGService:
         else:
             if named_entity:
                 answer = (
-                    f"I couldn't find an exact mention of "
-                    f"{named_entity.group(1)} in the indexed document text. "
-                    "This does not prove the original file lacks the topic; "
-                    "the available indexed text may be incomplete."
+                    f"{named_entity.group(1)} is not mentioned in the indexed "
+                    "document text, so I cannot answer that question from "
+                    "the uploaded material."
                 )
             else:
                 answer = self.NO_CONTEXT_ANSWER
