@@ -350,10 +350,57 @@ class RAGService:
             )
         else:
             result = retrieval.retrieve(normalized, limit=min(top_k, 3))
+        # Broad document tasks need source order; targeted questions about an
+        # explicitly selected file need RELEVANT passages from that file, not
+        # its first three chunks. This is particularly important for absent
+        # named services: an unrelated passage must never invite an LLM guess.
+        candidates = result.chunks
+        if document_id and not document_wide:
+            if named_entity:
+                subject_pattern = re.compile(
+                    rf"(?<![a-z0-9]){re.escape(named_entity.group(1))}(?![a-z0-9])",
+                    re.IGNORECASE,
+                )
+                candidates = [c for c in candidates if subject_pattern.search(c.text)]
+            elif comparison:
+                left, right = comparison.group(1), comparison.group(2)
+                left_pattern = re.compile(rf"(?<![a-z0-9]){re.escape(left)}(?![a-z0-9])", re.IGNORECASE)
+                right_pattern = re.compile(rf"(?<![a-z0-9]){re.escape(right)}(?![a-z0-9])", re.IGNORECASE)
+                left_hits = [c for c in candidates if left_pattern.search(c.text)]
+                right_hits = [c for c in candidates if right_pattern.search(c.text)]
+                if not left_hits or not right_hits:
+                    candidates = []
+                else:
+                    selected = [left_hits[0]]
+                    if right_hits[0].chunk_id != selected[0].chunk_id:
+                        selected.append(right_hits[0])
+                    candidates = selected + [
+                        c for c in candidates
+                        if c not in selected and (
+                            left_pattern.search(c.text) or right_pattern.search(c.text)
+                        )
+                    ]
+            else:
+                terms = [
+                    term for term in re.findall(r"[a-z0-9]{3,}", normalized.casefold())
+                    if term not in {
+                        "the", "and", "for", "what", "with", "from", "does",
+                        "how", "can", "this", "that", "are", "document", "explain",
+                    }
+                ]
+                if terms:
+                    candidates = sorted(
+                        candidates,
+                        key=lambda c: sum(
+                            bool(re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])",
+                                           c.text, re.IGNORECASE))
+                            for term in terms
+                        ),
+                        reverse=True,
+                    )
         # Broad document tasks must see the full source, not just the three
         # highest-matching chunks. Sample sections in source order within
         # a bounded CPU-friendly prompt.
-        candidates = result.chunks
         count = 12 if document_wide else (4 if comparison or named_entity else 3)
         if document_wide and len(candidates) > count:
             indices = [
