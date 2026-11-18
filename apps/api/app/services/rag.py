@@ -434,7 +434,7 @@ class RAGService:
         This intentionally only checks literal names, not semantic entailment.
         Claims we cannot verify are omitted rather than disguised as cited facts.
         """
-        numbered = re.findall(r"(?m)^\\s*\\d+[.)]\\s+(.+?)\\s*$", answer)
+        numbered = re.findall(r"(?m)^\s*\d+[.)]\s+(.+?)\s*$", answer)
         if not numbered:
             return answer
         verified: list[str] = []
@@ -458,7 +458,7 @@ class RAGService:
                                 + "".join(f"[{i}]" for i in citation_ids))
         if not verified:
             return cls.INVALID_CITATION_ANSWER
-        return "\\n".join(verified)
+        return "\n".join(verified)
 
     @classmethod
     def _verbatim_excerpts(
