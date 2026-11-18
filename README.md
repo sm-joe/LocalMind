@@ -130,6 +130,14 @@ cd ../..
 
 **Never run docker compose down -v on an installation whose data you want to keep.** It removes persistent Compose volumes.
 
+To download an additional Ollama model into the existing persistent model volume, use the Bash helper. It temporarily grants outbound network access, then disconnects the runtime Ollama container:
+
+~~~bash
+bash scripts/pull-ollama-model.sh qwen3:8b
+~~~
+
+Only run this after the stack is healthy. This does not change the active LLM_MODEL unless you update .env and restart the relevant services.
+
 ## Backup And Evaluation
 
 Pause document uploads and chat writes before taking backups.
