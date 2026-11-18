@@ -212,16 +212,21 @@ class RetrievalService:
                 right_only.append(chunk)
         # Preserve evidence for BOTH subjects rather than allowing the
         # more frequent name to crowd out the other.
-        selected: list[RetrievedChunk] = both[:limit]
+        selected: list[RetrievedChunk] = []
+        # Lead with a definition for each side (when available), so a
+        # comparison prompt and its citation mapping are naturally balanced.
         for group in (left_only, right_only):
             if group and len(selected) < limit:
                 selected.append(group[0])
+        for chunk in both:
+            if len(selected) >= limit:
+                break
+            selected.append(chunk)
         for group in (left_only[1:], right_only[1:]):
             for chunk in group:
                 if len(selected) >= limit:
                     break
                 selected.append(chunk)
-        selected = selected[:limit]
         # An answer would be deceptive if the document never mentions one
         # of the requested concepts. Do not ask Ollama to guess that half.
         if not any(contains(left, c.text) for c in selected) or not any(
