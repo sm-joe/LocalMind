@@ -292,7 +292,15 @@ class RetrievalService:
                 r"\b(?:roles?|keys?|instances?|scaling|load balanc)\b",
                 before[-30:] + after[:60], re.IGNORECASE,
             ))
-            score = int(question) * 5 + int(description) * 4 - int(role_example)
+            unrelated_role_question = bool(re.search(
+                r"why should.*(?:iam roles?|access keys?)",
+                chunk.text[max(0, found.start() - 110):found.start()],
+                re.IGNORECASE,
+            ))
+            score = (
+                int(question) * 5 + int(description) * 4
+                - int(role_example) - 4 * int(unrelated_role_question)
+            )
             return (score, -chunk.chunk_id)
 
         left_candidates = sorted(left_only + both,
