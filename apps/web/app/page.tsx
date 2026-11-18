@@ -699,8 +699,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   return (
     <main className="lm-app">
       <aside className="lm-sidebar" aria-label="Main navigation">
-        <div className="lm-brand"><span className="lm-brand-symbol" aria-hidden="true">m.</span><span>localmind</span></div>
-        <div className="lm-workspace-select"><span className="lm-workspace-avatar">L</span><div><strong>Personal workspace</strong><small>Private knowledge base</small></div></div>
+        <div className="lm-brand"><span className="lm-brand-symbol" aria-hidden="true">m.</span><span>LocalMind</span></div>
+        <div className="lm-workspace-select"><span className="lm-workspace-avatar">L</span><div><strong>Personal Workspace</strong><small>Private Knowledge Base</small></div></div>
         <div className="lm-nav-label">WORKSPACE</div>
         <nav className="lm-navigation">
           <button type="button" className={activeView === "library" ? "lm-nav-link active" : "lm-nav-link"} aria-current={activeView === "library" ? "page" : undefined} onClick={() => setActiveView("library")}>
@@ -714,51 +714,51 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           </button>
         </nav>
         <div className="lm-nav-label lm-quick-heading">QUICK ACTIONS</div>
-        <button type="button" className="lm-sidebar-action" onClick={openFilePicker} disabled={uploading}>+ Add documents</button>
-        <button type="button" className="lm-sidebar-action muted" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New research thread</button>
-        <div className="lm-sidebar-bottom"><span className="lm-local-indicator" /> Local workspace <small>Your files stay in your environment</small></div>
+        <button type="button" className="lm-sidebar-action" onClick={openFilePicker} disabled={uploading}>+ Add Documents</button>
+        <button type="button" className="lm-sidebar-action muted" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Research Thread</button>
+        <div className="lm-sidebar-bottom"><span className="lm-local-indicator" /> Local Workspace <small>Your Files Stay In Your Environment</small></div>
       </aside>
 
       <section className="lm-main">
         <header className="lm-topbar">
           <div className="lm-breadcrumb">Workspace <span>/</span> <strong>{activeView === "library" ? "Documents" : activeView === "research" ? "Research" : "Conversations"}</strong></div>
-          <div className="lm-header-right"><span className="lm-topbar-privacy">● Private &amp; local</span><button type="button" className="lm-signout" onClick={onLogout}>Sign out</button></div>
+          <div className="lm-header-right"><span className="lm-topbar-privacy">● Private &amp; Local</span><button type="button" className="lm-signout" onClick={onLogout}>Sign Out</button></div>
         </header>
         <div className="lm-content">
           {activeView === "library" && (
             <section className="lm-view lm-library" aria-label="Document library">
               <div className="lm-page-header">
-                <div><p className="lm-overline">YOUR WORKSPACE / FILE MANAGEMENT</p><h1>Documents</h1><p>Keep your knowledge organized, searchable, and ready to explore.</p></div>
-                <button className="lm-primary-button" type="button" onClick={openFilePicker} disabled={uploading}>{uploading ? "Indexing..." : "+ Upload documents"}</button>
+                <div><p className="lm-overline">YOUR WORKSPACE / FILE MANAGEMENT</p><h1>Documents</h1><p>Keep Your Knowledge Organized, Searchable, And Ready To Explore.</p></div>
+                <button className="lm-primary-button" type="button" onClick={openFilePicker} disabled={uploading}>{uploading ? "Indexing..." : "+ Upload Documents"}</button>
               </div>
               <div className="lm-stats">
-                <div><span>Files in your library</span><strong>{documents.length}</strong><small>Supported documents</small></div>
-                <div><span>Searchable passages</span><strong>{indexedChunks}</strong><small>Indexed chunks</small></div>
-                <div><span>Research conversations</span><strong>{conversations.filter((item) => !item.is_archived).length}</strong><small>Saved threads</small></div>
+                <div><span>Files In Your Library</span><strong>{documents.length}</strong><small>Supported Documents</small></div>
+                <div><span>Searchable Passages</span><strong>{indexedChunks}</strong><small>Indexed Chunks</small></div>
+                <div><span>Research Conversations</span><strong>{conversations.filter((item) => !item.is_archived).length}</strong><small>Saved Threads</small></div>
               </div>
               <div className={"lm-upload-zone" + (dragActive ? " is-dragging" : "")} onDragOver={(event) => { event.preventDefault(); if (!uploading) setDragActive(true); }} onDragLeave={(event) => { event.preventDefault(); setDragActive(false); }} onDrop={(event) => { event.preventDefault(); setDragActive(false); if (!uploading && event.dataTransfer.files[0]) void uploadDocument(event.dataTransfer.files[0]); }}>
                 <div className="lm-upload-icon" aria-hidden="true">↑</div>
-                <div><strong>{dragActive ? "Release to add your document" : "Drag and drop files here"}</strong><p>PDF, Word, Markdown or text · Up to 10 MB per file</p></div>
-                <button type="button" onClick={openFilePicker} disabled={uploading} className="lm-outline-button">{uploading ? "Indexing..." : "Browse files"}</button>
+                <div><strong>{dragActive ? "Release To Add Your Document" : "Drag And Drop Files Here"}</strong><p>PDF, Word, Markdown Or Text · Up To 10 MB Per File</p></div>
+                <button type="button" onClick={openFilePicker} disabled={uploading} className="lm-outline-button">{uploading ? "Indexing..." : "Browse Files"}</button>
               </div>
               {documentError && <div className="lm-error" role="alert">{documentError}</div>}
               {uploadNotice && <div className="lm-notice" role="status">{uploadNotice}<button type="button" aria-label="Dismiss upload notice" onClick={() => setUploadNotice(null)}>×</button></div>}
               <div className="lm-files-panel">
-                <div className="lm-section-header"><div><h2>Your files</h2><p>{visibleDocuments.length} of {documents.length} documents</p></div><label className="lm-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search file names" aria-label="Search file names" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} /></label></div>
-                <div className="lm-filters" aria-label="Filter file type">
-                  {["all", "pdf", "docx", "txt", "md"].map((type) => <button type="button" key={type} aria-pressed={fileTypeFilter === type} className={fileTypeFilter === type ? "active" : ""} onClick={() => setFileTypeFilter(type)}>{type === "all" ? "All files" : type.toUpperCase()}</button>)}
+                <div className="lm-section-header"><div><h2>Your Files</h2><p>{visibleDocuments.length} of {documents.length} documents</p></div><label className="lm-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search File Names" aria-label="Search File Names" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} /></label></div>
+                <div className="lm-filters" aria-label="Filter File Type">
+                  {["all", "pdf", "docx", "txt", "md"].map((type) => <button type="button" key={type} aria-pressed={fileTypeFilter === type} className={fileTypeFilter === type ? "active" : ""} onClick={() => setFileTypeFilter(type)}>{type === "all" ? "All Files" : type.toUpperCase()}</button>)}
                 </div>
-                <div className="lm-file-table" role="table" aria-label="Indexed documents">
+                <div className="lm-file-table" role="table" aria-label="Indexed Documents">
                   <div className="lm-file-row lm-file-thead" role="row"><span role="columnheader">NAME</span><span role="columnheader">TYPE</span><span role="columnheader">INDEXED CONTENT</span><span role="columnheader">ACTIONS</span></div>
-                  {documentsLoading ? <div className="lm-table-empty" role="status">Loading your library...</div> :
-                   visibleDocuments.length === 0 ? <div className="lm-table-empty"><strong>{documents.length === 0 ? "Your library is empty" : "No matching files"}</strong><p>{documents.length === 0 ? "Add a document above to start exploring." : "Try a different search or file type."}</p></div> :
+                  {documentsLoading ? <div className="lm-table-empty" role="status">Loading Your Library...</div> :
+                   visibleDocuments.length === 0 ? <div className="lm-table-empty"><strong>{documents.length === 0 ? "Your Library Is Empty" : "No Matching Files"}</strong><p>{documents.length === 0 ? "Add A Document Above To Start Exploring." : "Try A Different Search Or File Type."}</p></div> :
                    visibleDocuments.map((document) => (
                      <div className="lm-file-row" role="row" key={document.document_id}>
-                       <div className="lm-file-name" role="cell"><span className="lm-file-icon">{document.filename.split(".").pop()?.toUpperCase().slice(0, 4) || "FILE"}</span><div><strong title={document.filename}>{document.filename}</strong><small>Ready for questions</small></div></div>
+                       <div className="lm-file-name" role="cell"><span className="lm-file-icon">{document.filename.split(".").pop()?.toUpperCase().slice(0, 4) || "FILE"}</span><div><strong title={document.filename}>{document.filename}</strong><small>Ready For Questions</small></div></div>
                        <span className="lm-type" role="cell">{document.filename.split(".").pop()?.toUpperCase() || "FILE"}</span>
                        <span className="lm-chunks" role="cell">{document.chunks} passages</span>
                        <div className="lm-file-actions" role="cell">
-                         <button type="button" onClick={() => { setSelectedDocumentId(document.document_id); setActiveView("research"); setQuestion(""); }} aria-label={"Ask about " + document.filename}>Ask questions ↗</button>
+                         <button type="button" onClick={() => { setSelectedDocumentId(document.document_id); setActiveView("research"); setQuestion(""); }} aria-label={"Ask about " + document.filename}>Ask Questions ↗</button>
                          <button type="button" className="lm-delete" onClick={() => void deleteDocument(document.document_id)} disabled={deletingDocumentId === document.document_id} aria-label={"Delete " + document.filename}>{deletingDocumentId === document.document_id ? "..." : "Delete"}</button>
                        </div>
                      </div>
@@ -769,12 +769,12 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           )}
 
           {activeView === "history" && (
-            <section className="lm-view lm-history" aria-label="Conversation history">
-              <div className="lm-page-header"><div><p className="lm-overline">YOUR RESEARCH ARCHIVE</p><h1>Conversations</h1><p>Find, continue and organize your saved research threads.</p></div><button type="button" className="lm-primary-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New conversation</button></div>
+            <section className="lm-view lm-history" aria-label="Conversation History">
+              <div className="lm-page-header"><div><p className="lm-overline">YOUR RESEARCH ARCHIVE</p><h1>Conversations</h1><p>Find, Continue And Organize Your Saved Research Threads.</p></div><button type="button" className="lm-primary-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Conversation</button></div>
               <div className="lm-history-panel">
-                <div className="lm-section-header"><div><h2>{showArchived ? "Archived conversations" : "Recent conversations"}</h2><p>{visibleConversations.length} threads</p></div><div className="lm-history-tools"><label className="lm-search"><span aria-hidden="true">⌕</span><input type="search" aria-label="Find a conversation" placeholder="Search conversations" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} /></label><button type="button" className="lm-outline-button" onClick={() => setShowArchived((v) => !v)}>{showArchived ? "Show active" : "Archived"}</button></div></div>
+                <div className="lm-section-header"><div><h2>{showArchived ? "Archived Conversations" : "Recent Conversations"}</h2><p>{visibleConversations.length} threads</p></div><div className="lm-history-tools"><label className="lm-search"><span aria-hidden="true">⌕</span><input type="search" aria-label="Find A Conversation" placeholder="Search Conversations" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} /></label><button type="button" className="lm-outline-button" onClick={() => setShowArchived((v) => !v)}>{showArchived ? "Show Active" : "Archived"}</button></div></div>
                 {conversationError && <div className="lm-error" role="alert">{conversationError}</div>}
-                {conversationsLoading ? <div className="lm-table-empty">Loading conversations...</div> : visibleConversations.length === 0 ? <div className="lm-table-empty"><strong>No matching conversations</strong><p>Your conversations will appear here.</p></div> : visibleConversations.map((conversation) => (
+                {conversationsLoading ? <div className="lm-table-empty">Loading Conversations...</div> : visibleConversations.length === 0 ? <div className="lm-table-empty"><strong>No Matching Conversations</strong><p>Your Conversations Will Appear Here.</p></div> : visibleConversations.map((conversation) => (
                   <article className="lm-thread" key={conversation.id}>
                     <button type="button" className="lm-thread-open" disabled={conversationControlsDisabled} onClick={() => void openConversation(conversation.id)}>
                       <span className="lm-thread-icon">▤</span><span><strong>{conversation.title}</strong><small>{conversation.message_count} messages · {new Date(conversation.updated_at).toLocaleDateString()}</small></span><span className="lm-thread-arrow">↗</span>
@@ -786,41 +786,41 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                     </div>
                   </article>
                 ))}
-                {!conversationsLoading && conversationNextCursor && <button className="lm-load-more" type="button" onClick={() => void loadMoreConversations()} disabled={loadingMoreConversations || conversationControlsDisabled}>{loadingMoreConversations ? "Loading..." : "Load more conversations"}</button>}
+                {!conversationsLoading && conversationNextCursor && <button className="lm-load-more" type="button" onClick={() => void loadMoreConversations()} disabled={loadingMoreConversations || conversationControlsDisabled}>{loadingMoreConversations ? "Loading..." : "Load More Conversations"}</button>}
               </div>
             </section>
           )}
 
           {activeView === "research" && (
-            <section className="lm-view lm-research" aria-label="Document research">
-              <div className="lm-page-header lm-research-header"><div><p className="lm-overline">ASK &amp; VERIFY / RESEARCH</p><h1>Research</h1><p>Explore your material and inspect the passages behind each answer.</p></div><button type="button" className="lm-outline-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New thread</button></div>
-              <div className="lm-scope-toolbar"><label htmlFor="lm-document-scope">Source collection</label><select id="lm-document-scope" value={selectedDocumentId ?? ""} onChange={(event) => setSelectedDocumentId(event.target.value || null)}><option value="">All documents</option>{documents.map((doc) => <option value={doc.document_id} key={doc.document_id}>{doc.filename}</option>)}</select><span>{selectedDocument ? "Questions are limited to this document" : "Search across your indexed library"}</span></div>
+            <section className="lm-view lm-research" aria-label="Document Research">
+              <div className="lm-page-header lm-research-header"><div><p className="lm-overline">ASK &amp; VERIFY / RESEARCH</p><h1>Research</h1><p>Explore Your Material And Inspect The Passages Behind Each Answer.</p></div><button type="button" className="lm-outline-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Thread</button></div>
+              <div className="lm-scope-toolbar"><label htmlFor="lm-document-scope">Source Collection</label><select id="lm-document-scope" value={selectedDocumentId ?? ""} onChange={(event) => setSelectedDocumentId(event.target.value || null)}><option value="">All Documents</option>{documents.map((doc) => <option value={doc.document_id} key={doc.document_id}>{doc.filename}</option>)}</select><span>{selectedDocument ? "Questions Are Limited To This Document" : "Search Across Your Indexed Library"}</span></div>
               <div className="lm-research-grid">
-                <section className="lm-answer-panel" aria-label="Question and answer">
-                  <div className="lm-answer-header"><div><small>ACTIVE THREAD</small><h2>{activeConversation?.title ?? "New research"}</h2></div><span>{messages.length} messages</span></div>
-                  {messagesLoading ? <div className="lm-answer-empty" role="status">Opening conversation...</div> :
+                <section className="lm-answer-panel" aria-label="Question And Answer">
+                  <div className="lm-answer-header"><div><small>ACTIVE THREAD</small><h2>{activeConversation?.title ?? "New Research"}</h2></div><span>{messages.length} messages</span></div>
+                  {messagesLoading ? <div className="lm-answer-empty" role="status">Opening Conversation...</div> :
                     messages.length === 0 ? (
-                      <div className="lm-answer-empty"><span className="lm-answer-empty-icon" aria-hidden="true">⌕</span><h2>Start with a question.</h2><p>Summarize a file, explore a concept or compare two ideas. The source passages appear alongside each answer.</p><div className="lm-starter-prompts"><button type="button" onClick={() => setQuestion("Summarize the document.")}>Summarize the document ↗</button><button type="button" onClick={() => setQuestion("What are the key topics covered?")}>Find key topics ↗</button></div></div>
-                    ) : <div className="lm-answer-messages">{messages.map((message) => <article className={"lm-answer-message " + (message.role === "user" ? "is-user" : "is-assistant")} key={message.id}><div className="lm-message-author">{message.role === "user" ? "YOU ASKED" : "LOCALMIND"}</div><div className="lm-message-text">{message.status === "failed" && !message.content ? "This answer could not be generated." : message.content}</div>{message.role === "assistant" && message.status === "complete" && <button type="button" className="lm-copy" onClick={() => void copyText(message.content)}>Copy answer</button>}{message.status === "failed" && <span className="lm-message-failed">Generation failed</span>}</article>)}{isLoading && <div className="lm-thinking" role="status">Researching your documents...</div>}<div ref={messagesEndRef} aria-hidden="true" /></div>}
+                      <div className="lm-answer-empty"><span className="lm-answer-empty-icon" aria-hidden="true">⌕</span><h2>Start With A Question.</h2><p>Summarize A File, Explore A Concept Or Compare Two Ideas. The Source Passages Appear Alongside Each Answer.</p><div className="lm-starter-prompts"><button type="button" onClick={() => setQuestion("Summarize the document.")}>Summarize The Document ↗</button><button type="button" onClick={() => setQuestion("What are the key topics covered?")}>Find Key Topics ↗</button></div></div>
+                    ) : <div className="lm-answer-messages">{messages.map((message) => <article className={"lm-answer-message " + (message.role === "user" ? "is-user" : "is-assistant")} key={message.id}><div className="lm-message-author">{message.role === "user" ? "YOU ASKED" : "LOCALMIND"}</div><div className="lm-message-text">{message.status === "failed" && !message.content ? "This Answer Could Not Be Generated." : message.content}</div>{message.role === "assistant" && message.status === "complete" && <button type="button" className="lm-copy" onClick={() => void copyText(message.content)}>Copy Answer</button>}{message.status === "failed" && <span className="lm-message-failed">Generation Failed</span>}</article>)}{isLoading && <div className="lm-thinking" role="status">Researching Your Documents...</div>}<div ref={messagesEndRef} aria-hidden="true" /></div>}
                   {error && <div className="lm-error" role="alert">{error}</div>}
-                  <form className="lm-composer" onSubmit={sendMessage}><textarea aria-label="Ask a question about your documents" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about your documents..." rows={2} disabled={isLoading || messagesLoading} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (question.trim() && !isLoading && !messagesLoading) event.currentTarget.form?.requestSubmit(); } }} /><div><small>Enter to ask · Shift + Enter for a new line</small><button className="lm-primary-button" type="submit" disabled={!question.trim() || isLoading || messagesLoading}>{isLoading ? "Working..." : "Ask question ↗"}</button></div></form>
+                  <form className="lm-composer" onSubmit={sendMessage}><textarea aria-label="Ask A Question About Your Documents" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask A Question About Your Documents..." rows={2} disabled={isLoading || messagesLoading} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (question.trim() && !isLoading && !messagesLoading) event.currentTarget.form?.requestSubmit(); } }} /><div><small>Enter To Ask · Shift + Enter For A New Line</small><button className="lm-primary-button" type="submit" disabled={!question.trim() || isLoading || messagesLoading}>{isLoading ? "Working..." : "Ask Question ↗"}</button></div></form>
                   {copyNotice && <div className="lm-notice" role="status">{copyNotice}<button type="button" onClick={() => setCopyNotice(null)}>×</button></div>}
                 </section>
-                <aside className="lm-evidence-panel" aria-label="Source evidence">
-                  <div className="lm-evidence-header"><div><small>REFERENCES</small><h2>Source evidence</h2><p>{evidenceSources.length} passages from the latest answer</p></div><button type="button" aria-label={evidencePanelCollapsed ? "Expand sources" : "Collapse sources"} aria-expanded={!evidencePanelCollapsed} onClick={() => setEvidencePanelCollapsed((v) => !v)}>{evidencePanelCollapsed ? "+" : "−"}</button></div>
+                <aside className="lm-evidence-panel" aria-label="Source Evidence">
+                  <div className="lm-evidence-header"><div><small>REFERENCES</small><h2>Source Evidence</h2><p>{evidenceSources.length} Passages From The Latest Answer</p></div><button type="button" aria-label={evidencePanelCollapsed ? "Expand Sources" : "Collapse Sources"} aria-expanded={!evidencePanelCollapsed} onClick={() => setEvidencePanelCollapsed((v) => !v)}>{evidencePanelCollapsed ? "+" : "−"}</button></div>
                   {!evidencePanelCollapsed && <div className="lm-evidence-body">
-                    {sourcePreviewLoading && <p role="status">Loading source passage...</p>}
+                    {sourcePreviewLoading && <p role="status">Loading Source Passage...</p>}
                     {sourcePreviewError && <p role="alert" className="lm-error">{sourcePreviewError}</p>}
-                    {sourcePreview && <section className="lm-source-preview"><div><strong>{sourcePreview.filename}</strong><button type="button" onClick={() => setSourcePreview(null)}>Close</button></div><small>PASSAGE {sourcePreview.chunk_id}</small><p>{sourcePreview.text}</p><button type="button" className="lm-outline-button" onClick={() => void copyText(sourcePreview.text)}>Copy passage</button></section>}
-                    {evidenceSources.length === 0 ? <div className="lm-evidence-empty"><span aria-hidden="true">▤</span><strong>Evidence, not guesswork.</strong><p>Retrieved source passages will appear here after your question.</p></div> :
-                    evidenceSources.map((source, index) => <article className="lm-evidence-item" key={source.document_id + "-" + source.chunk_id + "-" + index}><span className="lm-citation">{source.citation}</span><div><strong title={source.filename}>{source.filename}</strong><small>Passage {source.chunk_id}</small><button type="button" onClick={() => void previewSource(source)}>Read original passage ↗</button></div></article>)}
+                    {sourcePreview && <section className="lm-source-preview"><div><strong>{sourcePreview.filename}</strong><button type="button" onClick={() => setSourcePreview(null)}>Close</button></div><small>PASSAGE {sourcePreview.chunk_id}</small><p>{sourcePreview.text}</p><button type="button" className="lm-outline-button" onClick={() => void copyText(sourcePreview.text)}>Copy Passage</button></section>}
+                    {evidenceSources.length === 0 ? <div className="lm-evidence-empty"><span aria-hidden="true">▤</span><strong>Evidence, Not Guesswork.</strong><p>Retrieved Source Passages Will Appear Here After Your Question.</p></div> :
+                    evidenceSources.map((source, index) => <article className="lm-evidence-item" key={source.document_id + "-" + source.chunk_id + "-" + index}><span className="lm-citation">{source.citation}</span><div><strong title={source.filename}>{source.filename}</strong><small>Passage {source.chunk_id}</small><button type="button" onClick={() => void previewSource(source)}>Read Original Passage ↗</button></div></article>)}
                   </div>}
                 </aside>
               </div>
             </section>
           )}
         </div>
-        <footer className="lm-footer"><span>LocalMind · Private knowledge workspace</span><span>Documents first. Answers with context.</span></footer>
+        <footer className="lm-footer"><span>LocalMind · Private Knowledge Workspace</span><span>Documents First. Answers With Context.</span></footer>
         <input ref={fileInputRef} type="file" className="lm-hidden-file" accept=".pdf,.docx,.txt,.md" onChange={handleFileChange} />
       </section>
     </main>
@@ -879,7 +879,7 @@ export default function Home() {
         <header className="auth-header">
           <div className="brand-lockup">
             <span className="brand-mark" aria-hidden="true">M<span className="brand-mark-detail">/</span></span>
-            <span>LocalMind<span className="brand-mark-subtle"> / the reading desk</span></span>
+            <span>LocalMind<span className="brand-mark-subtle"> / The Reading Desk</span></span>
           </div>
           <span className="auth-header-label"><span className="status-dot" /> PRIVATE. LOCAL. YOURS.</span>
         </header>
@@ -888,10 +888,10 @@ export default function Home() {
           <section className="auth-story" aria-label="About LocalMind">
             <div className="auth-editorial-header">
               <p className="auth-kicker"><span>01 /</span> A HOME FOR YOUR KNOWLEDGE</p>
-              <h1>Less searching.<br /><em>More finding.</em></h1>
+              <h1>Less Searching.<br /><em>More Finding.</em></h1>
               <p className="auth-story-description">
-                A calm place to read across your documents, ask better questions
-                and follow every answer back to its source.
+                A Calm Place To Read Across Your Documents, Ask Better Questions
+                And Follow Every Answer Back To Its Source.
               </p>
             </div>
             <div className="auth-document-preview" aria-label="Illustration of the LocalMind document reading workflow">
@@ -902,26 +902,26 @@ export default function Home() {
               <div className="auth-preview-paper">
                 <div className="auth-preview-paper-heading">
                   <span className="auth-preview-file-icon" aria-hidden="true">D</span>
-                  <div><span>YOUR LIBRARY</span><strong>Notes on the things that matter.</strong></div>
+                  <div><span>YOUR LIBRARY</span><strong>Notes On The Things That Matter.</strong></div>
                   <span className="auth-preview-page-number">01—03</span>
                 </div>
                 <p className="auth-preview-label">A QUESTION WORTH ASKING</p>
-                <h2>What does the document<br />actually say?</h2>
+                <h2>What Does The Document<br />Actually Say?</h2>
                 <div className="auth-preview-rules" aria-hidden="true">
                   <span /><span /><span />
                 </div>
                 <div className="auth-preview-quote">
                   <span className="auth-preview-quote-mark" aria-hidden="true">“</span>
-                  <p>Answers grounded in your documents, with the passages beside them.</p>
+                  <p>Answers Grounded In Your Documents, With The Passages Beside Them.</p>
                   <span className="auth-preview-citation">SOURCE / 001</span>
                 </div>
               </div>
               <div className="auth-preview-bottom"><span>READ</span><span>QUESTION</span><span>TRACE</span></div>
             </div>
             <div className="auth-steps" aria-label="How LocalMind works">
-              <div><span>01</span><div><strong>Collect</strong><p>PDF, Word, Markdown and plain text.</p></div></div>
-              <div><span>02</span><div><strong>Explore</strong><p>Ask questions and connect ideas.</p></div></div>
-              <div><span>03</span><div><strong>Verify</strong><p>Inspect the original passages.</p></div></div>
+              <div><span>01</span><div><strong>Collect</strong><p>PDF, Word, Markdown And Plain Text.</p></div></div>
+              <div><span>02</span><div><strong>Explore</strong><p>Ask Questions and connect ideas.</p></div></div>
+              <div><span>03</span><div><strong>Verify</strong><p>Inspect The Original Passages.</p></div></div>
             </div>
           </section>
 
@@ -930,17 +930,17 @@ export default function Home() {
             <div className="auth-card">
               <div className="auth-card-icon" aria-hidden="true">M<span>/</span></div>
               <p className="eyebrow">WELCOME BACK</p>
-              <h2 id="auth-title">Make yourself<br /><em>at home.</em></h2>
+              <h2 id="auth-title">Make Yourself<br /><em>At Home.</em></h2>
               <p className="auth-card-description">
-                Sign in to continue your research, documents and conversations.
+                Sign In To Continue Your Research, Documents And Conversations.
               </p>
               <form onSubmit={(event) => void signIn(event)}>
-                <label htmlFor="localmind-password">Administrator password</label>
+                <label htmlFor="localmind-password">Administrator Password</label>
                 <input
                   id="localmind-password"
                   type="password"
                   autoComplete="current-password"
-                  placeholder="Enter your password"
+                  placeholder="Enter Your Password"
                   required
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -949,12 +949,12 @@ export default function Home() {
                 />
                 {loginError && <div id="auth-error" className="auth-error" role="alert">{loginError}</div>}
                 <button type="submit" className="auth-submit" disabled={loggingIn || !password.trim()}>
-                  <span>{loggingIn ? "Verifying access…" : "Open your desk"}</span><span aria-hidden="true">↗</span>
+                  <span>{loggingIn ? "Verifying Access…" : "Open Your Desk"}</span><span aria-hidden="true">↗</span>
                 </button>
               </form>
               <div className="auth-card-foot">
                 <span className="auth-privacy-mark" aria-hidden="true">●</span>
-                Self-hosted. Your files stay in your environment.
+                Self-hosted. Your Files Stay In Your Environment.
               </div>
             </div>
             <p className="auth-signin-note">A PERSONAL SPACE FOR THOUGHTFUL WORK.</p>
