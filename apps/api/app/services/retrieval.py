@@ -239,13 +239,20 @@ class RetrievalService:
         if search_limit <= 0:
             raise ValueError("Search limit must be greater than zero")
 
+        # A generic summary has no semantic target. Scoring the sentence
+        # "summarize the uploaded document" against chunks is unreliable:
+        # index the actual corpus first, then cover all available files.
+        # Filename-specific requests retain their normal targeted retrieval.
+        explicit_filename = self._extract_filename(normalized_query)
+        if explicit_filename is None:
+            return self._retrieve_indexed_corpus()
+
         total_start = perf_counter()
         embedding_start = perf_counter()
         query_embedding = self.embedding_service.embed(normalized_query)
         embedding_ms = (perf_counter() - embedding_start) * 1000
 
         search_start = perf_counter()
-        explicit_filename = self._extract_filename(normalized_query)
         search_arguments: dict[str, Any] = {
             "vector": query_embedding,
             "limit": max(search_limit * 4, 20),
@@ -329,6 +336,59 @@ class RetrievalService:
             chunks=document_chunks,
             diagnostics=diagnostics,
             performance=performance,
+        )
+
+    def _retrieve_indexed_corpus(self) -> RetrievalResult:
+        """Cover indexed files for generic summary/extraction requests.
+
+        Read Qdrant payloads rather than guessing the file from a generic
+        question embedding. Round-robin sources so a long first PDF cannot
+        crowd out other uploaded documents. The RAG layer still enforces
+        the final prompt budget.
+        """
+        start = perf_counter()
+        by_document: dict[str, dict[int, RetrievedChunk]] = {}
+        # The store returns payloads only (no vectors) via paginated scroll.
+        # Avoid an unbounded in-memory corpus scan for very large installs.
+        for index, point in enumerate(self.vector_store.iter_points()):
+            if index >= 10000:
+                break
+            payload = point.payload or {}
+            chunk = self._build_chunk(payload, 0.0)
+            if chunk is not None:
+                by_document.setdefault(chunk.document_id, {}).setdefault(
+                    chunk.chunk_id, chunk
+                )
+        groups = [
+            sorted(parts.values(), key=lambda chunk: chunk.chunk_id)
+            for _, parts in sorted(by_document.items())
+        ]
+        # Interleave chunks across documents; preserves each document's
+        # internal chunk order and gives every file a chance in the prompt.
+        chunks: list[RetrievedChunk] = []
+        for i in range(max((len(group) for group in groups), default=0)):
+            for group in groups:
+                if i < len(group):
+                    chunks.append(group[i])
+        elapsed = round((perf_counter() - start) * 1000, 2)
+        return RetrievalResult(
+            chunks=chunks,
+            diagnostics=RetrievalDiagnostics(
+                requested_limit=len(chunks),
+                candidate_count=len(chunks),
+                returned_count=len(chunks),
+                filtered_count=0,
+                top_candidate_score=None,
+                bottom_candidate_score=None,
+                top_score=None,
+                bottom_score=None,
+                has_context=bool(chunks),
+            ),
+            performance=RetrievalPerformance(
+                embedding_ms=0.0,
+                search_ms=elapsed,
+                total_ms=elapsed,
+            ),
         )
 
     def _retrieve_by_filename(
