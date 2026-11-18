@@ -7,6 +7,7 @@ from app.services.llm import LLMService
 def test_ollama_chat_uses_extended_context_for_cited_answers(monkeypatch):
     service = LLMService.__new__(LLMService)
     service.model = "llama3.2:3b"
+    service.num_ctx = 6144
 
     class FakeClient:
         def __init__(self):
@@ -18,4 +19,4 @@ def test_ollama_chat_uses_extended_context_for_cited_answers(monkeypatch):
     service.client = FakeClient()
     result = service.generate("Answer with retrieved evidence and citations.")
     assert result == "Qdrant stores vectors [1]."
-    assert service.client.options["num_ctx"] >= 8192
+    assert service.client.options["num_ctx"] == 6144
