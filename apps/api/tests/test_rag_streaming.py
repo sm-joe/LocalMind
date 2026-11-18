@@ -93,7 +93,7 @@ def test_uncited_model_output_never_relabels_unverified_claims_as_cited():
     assert events[0] == ("chunk", "Unsupported claim.")
     assert events[-1][0] == "done"
     assert events[-1][1].answer.startswith(
-        "Unverified answer (the model omitted valid citations):"
+        "Unverified answer (citation or source validation failed):"
     )
     assert "Unsupported claim." in events[-1][1].answer
     assert "[1]" not in events[-1][1].answer
