@@ -169,7 +169,7 @@ git remote set-url origin https://github.com/sm-joe/localmind.git
 git remote -v
 ~~~
 
-The directory containing an existing Compose installation should **not** be renamed casually. Compose defaults to using that directory as the project name; changing it can cause volumes to appear missing. To preserve existing database, Qdrant and Ollama volumes, keep the existing local checkout directory name (even if the remote repository is now called LocalMind), or perform an explicit verified storage migration.
+LocalMind pins Docker Compose's default project identity to the historical `localrag` name, so moving a default installation to a directory called `LocalMind` does **not** silently create new Qdrant and Ollama volumes. Existing database and container identifiers are retained for compatibility. If your original installation used a custom `COMPOSE_PROJECT_NAME`, continue setting that exact value whenever you run Compose. Verify mounted volumes and backups before changing any paths; do not delete existing volumes.
 
 ~~~bash
 # Example: reuse an established localrag checkout
