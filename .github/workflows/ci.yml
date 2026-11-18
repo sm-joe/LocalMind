@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: localrag-ci-${{ github.workflow }}-${{ github.ref }}
+  group: localmind-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -218,6 +218,10 @@ jobs:
           python -m unittest discover -s scripts/tests -p 'test_*.py'
           python -m unittest discover -s evals/tests -p 'test_*.py'
 
+      - name: Validate Bash Helper Syntax
+        working-directory: .
+        run: bash -n scripts/pull-ollama-model.sh
+
       - name: Run Web Lint
         run: npm run lint
 
@@ -258,9 +262,9 @@ jobs:
           context: ./apps/api
           file: ./apps/api/Dockerfile
           load: true
-          tags: localrag-api:ci
-          cache-from: type=gha,scope=localrag-api
-          cache-to: type=gha,scope=localrag-api,mode=max
+          tags: localmind-api:ci
+          cache-from: type=gha,scope=localmind-api
+          cache-to: type=gha,scope=localmind-api,mode=max
 
       # The table scan is the blocking security gate; it prints the actual
       # CVEs and fixed versions for developers to act on.
@@ -268,7 +272,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: "v0.75.0"
-          image-ref: localrag-api:ci
+          image-ref: localmind-api:ci
           format: table
           exit-code: '1'
           ignore-unfixed: true
@@ -279,7 +283,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: "v0.75.0"
-          image-ref: localrag-api:ci
+          image-ref: localmind-api:ci
           format: sarif
           output: trivy-api-results.sarif
           exit-code: '0'
@@ -299,16 +303,16 @@ jobs:
           context: ./apps/web
           file: ./apps/web/Dockerfile
           load: true
-          tags: localrag-web:ci
-          cache-from: type=gha,scope=localrag-web
-          cache-to: type=gha,scope=localrag-web,mode=max
+          tags: localmind-web:ci
+          cache-from: type=gha,scope=localmind-web
+          cache-to: type=gha,scope=localmind-web,mode=max
 
       # Enforce the vulnerability gate in a readable format.
       - name: Scan Web Image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: "v0.75.0"
-          image-ref: localrag-web:ci
+          image-ref: localmind-web:ci
           format: table
           exit-code: '1'
           ignore-unfixed: true
@@ -319,7 +323,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: "v0.75.0"
-          image-ref: localrag-web:ci
+          image-ref: localmind-web:ci
           format: sarif
           output: trivy-web-results.sarif
           exit-code: '0'
