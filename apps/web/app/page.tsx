@@ -846,8 +846,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                       <div className="source-status" role="note">
                         <span className="source-status-icon" aria-hidden="true">i</span>
                         <div>
-                          <strong>No citations returned</strong>
-                          <p>This response has no linked document evidence. Check the uploaded documents before relying on it.</p>
+                          <strong>No indexed evidence available</strong>
+                          <p>LocalRAG could not retrieve passages for this question. Confirm the file was indexed successfully, then try again. Answers without evidence are not verified.</p>
                         </div>
                       </div>
                     )}
