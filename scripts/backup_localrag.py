@@ -1,7 +1,7 @@
-"""Back up LocalRAG PostgreSQL and Qdrant data without deleting volumes.
+"""Back up LocalMind PostgreSQL and Qdrant data without deleting volumes.
 
-Usage (Windows PowerShell or Linux):
-    python scripts/backup_localrag.py --output backups
+Usage (Bash):
+    python3 scripts/backup_localrag.py --output backups
 
 Requires Docker Compose services api, postgres, and qdrant to be running.
 For a consistent backup, pause document uploads and chat writes while running.
@@ -49,7 +49,7 @@ def create_backup(output_directory: Path) -> Path:
     qdrant_snapshot = destination / "qdrant.snapshot"
 
     try:
-        # Do not stream binary pg_dump data through PowerShell's text pipeline.
+        # Copy the binary pg_dump directly to avoid text encoding conversions.
         run(
             "docker", "exec", "localrag-postgres",
             "pg_dump", "-U", "localrag", "-Fc",
@@ -136,7 +136,7 @@ def main() -> int:
         else:
             destination = create_backup(args.output)
             verify_backup(destination)
-            print(f"LocalRAG backup created and verified: {destination}")
+            print(f"LocalMind backup created and verified: {destination}")
         return 0
     except (subprocess.CalledProcessError, OSError, KeyError, ValueError, RuntimeError) as exc:
         print(f"Backup failed: {exc}", file=sys.stderr)
