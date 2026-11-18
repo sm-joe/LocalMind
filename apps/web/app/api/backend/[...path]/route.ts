@@ -69,7 +69,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const timedOut = error instanceof Error && (
       error.name === "TimeoutError" || error.name === "AbortError"
     );
-    console.error("LocalRAG API proxy request failed", {
+    console.error("LocalMind API proxy request failed", {
       operation: path[0],
       errorType: error instanceof Error ? error.name : "unknown",
       timedOut,
@@ -77,7 +77,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     return NextResponse.json({
       detail: timedOut
         ? "The local model took too long to respond. Check Ollama memory and CPU usage, then retry."
-        : "Cannot reach the LocalRAG API. Check that the api container is running and healthy.",
+        : "Cannot reach the LocalMind API. Check that the api container is running and healthy.",
     }, { status: timedOut ? 504 : 502 });
   }
 }
