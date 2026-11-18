@@ -1,3 +1,8 @@
+# Keep the original Compose project identity when a checkout is renamed to LocalMind.
+# Existing qdrant_data and ollama_models volumes use this project prefix.
+# Operators with custom historical project names should explicitly set COMPOSE_PROJECT_NAME.
+name: ${COMPOSE_PROJECT_NAME:-localrag}
+
 services:
   api:
     build:
