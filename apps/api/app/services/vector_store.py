@@ -182,11 +182,14 @@ class VectorStore:
             raise ValueError(
                 "Limit must be greater than zero."
             )
-        # An empty installation has no collection yet; allow the UI to
-        # report "upload documents" rather than raising Qdrant HTTP 404.
-        existing = self.client.get_collections().collections
-        if not any(item.name == self.collection_name for item in existing):
-            return
+        # Only unfiltered corpus scans need the empty-install guard.
+        # Filtered scans must reach Qdrant's scroll API: callers use them
+        # for precise document retrieval and pagination, and tests may mock
+        # scroll directly without mocking collection discovery.
+        if document_id is None:
+            existing = self.client.get_collections().collections
+            if not any(item.name == self.collection_name for item in existing):
+                return
         offset: Any = None
 
         while True:
