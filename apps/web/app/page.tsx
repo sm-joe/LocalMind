@@ -113,6 +113,11 @@ async function responseError(
 function Workspace({ onLogout }: { onLogout: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -548,7 +553,12 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       setDocumentError("Unsupported file type. Use PDF, DOCX, TXT, or MD.");
       return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      setDocumentError("File exceeds the 10 MB limit.");
+      return;
+    }
     setUploading(true);
+    setUploadNotice(null);
     setDocumentError(null);
     try {
       const formData = new FormData();
@@ -561,7 +571,9 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       const data = (await response.json()) as UploadResponse;
       await loadDocuments();
       setDocumentError(null);
-      console.log(`Indexed ${data.filename} (${data.chunks} chunks)`);
+      setUploadNotice(data.status === "already_indexed"
+        ? `${data.filename} is already in your library.`
+        : `${data.filename} added · ${data.chunks} chunks indexed.`);
     } catch (requestError) {
       setDocumentError(requestError instanceof Error ? requestError.message : "Document upload failed.");
     } finally {
@@ -588,24 +600,39 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   }
 
   const activeConversation = conversations.find((item) => item.id === activeConversationId);
-  const visibleConversations = conversations.filter((item) => item.is_archived === showArchived);
+  const visibleConversations = conversations.filter((item) =>
+    item.is_archived === showArchived &&
+    item.title.toLowerCase().includes(conversationSearch.trim().toLowerCase()),
+  );
+  const visibleDocuments = documents.filter((item) =>
+    item.filename.toLowerCase().includes(documentSearch.trim().toLowerCase()),
+  );
   const evidenceSources = [...messages]
     .reverse()
     .find((message) => message.role === "assistant" && (message.sources?.length ?? 0) > 0)
     ?.sources ?? [];
   const conversationControlsDisabled = isLoading || messagesLoading || conversationActionId !== null;
 
+  async function copyText(content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopyNotice("Copied to clipboard");
+    } catch {
+      setCopyNotice("Could not access clipboard.");
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="workspace">
-        <header className="app-header">
-          <div>
-            <p className="eyebrow">LOCALRAG</p>
-            <h1>Ask your documents.</h1>
-            <p className="subtitle">Private, Local Document Retrieval Powered by Ollama and Qdrant.</p>
-          </div>
-          <div className="status-pill"><span className="status-dot" />Local</div>\n          <button type="button" onClick={onLogout} className="text-button">Sign out</button>
+        <header className="app-header product-header">
+          <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">◆</span><span>localrag <span className="brand-mark-subtle">/ workspace</span></span></div>
+          <div className="header-actions"><span className="status-pill"><span className="status-dot" />Private · Local</span><button type="button" onClick={onLogout} className="header-signout">Sign out ↗</button></div>
         </header>
+        <div className="workspace-intro">
+          <div><p className="eyebrow">YOUR KNOWLEDGE, CONNECTED</p><h1>Good questions start here<span className="heading-dot">.</span></h1><p className="subtitle">Explore documents, find trustworthy answers, and trace every insight to its source.</p></div>
+          <div className="workspace-metrics" aria-label="Workspace overview"><div><strong>{documents.length}</strong><span>Documents</span></div><div><strong>{conversations.filter((item) => !item.is_archived).length}</strong><span>Conversations</span></div></div>
+        </div>
 
         <div className="workspace-grid">
           <aside className="sidebar-panel">
@@ -625,6 +652,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                 </button>
               </div>
 
+              <label className="library-search-wrap"><span aria-hidden="true">⌕</span><input className="library-search" type="search" placeholder="Find a conversation" aria-label="Find a conversation" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} /></label>
               <div className="conversation-toolbar">
                 <span className="conversation-section-label">{showArchived ? "Archived chats" : "Recent chats"}</span>
                 <button
@@ -646,8 +674,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                   <div className="conversation-empty">Loading conversations…</div>
                 ) : visibleConversations.length === 0 ? (
                   <div className="conversation-empty">
-                    <strong>{showArchived ? "No archived chats" : "No conversations yet"}</strong>
-                    <span>{showArchived ? "Archived chats will appear here." : "Start a new chat to keep your questions and answers."}</span>
+                    <strong>{conversationSearch ? "No matching conversations" : showArchived ? "No archived chats" : "No conversations yet"}</strong>
+                    <span>{conversationSearch ? "Try a different search term." : showArchived ? "Archived chats will appear here." : "Start a new chat to keep your questions and answers."}</span>
                   </div>
                 ) : visibleConversations.map((conversation) => (
                   <article
@@ -723,6 +751,9 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                 <input ref={fileInputRef} type="file" className="hidden-file-input" accept=".pdf,.docx,.txt,.md" onChange={handleFileChange} />
               </div>
               {documentError && <div className="document-error" role="alert">{documentError}</div>}
+              {uploadNotice && <div className="upload-notice" role="status">{uploadNotice}<button type="button" onClick={() => setUploadNotice(null)} aria-label="Dismiss upload notice">×</button></div>}
+              {documents.length > 0 && <label className="library-search-wrap"><span aria-hidden="true">⌕</span><input className="library-search" type="search" aria-label="Find a document" placeholder="Find a document" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} /></label>}
+              <div className={`document-dropzone${dragActive ? " is-dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); if (!uploading) setDragActive(true); }} onDragLeave={(event) => { event.preventDefault(); setDragActive(false); }} onDrop={(event) => { event.preventDefault(); setDragActive(false); if (!uploading && event.dataTransfer.files[0]) void uploadDocument(event.dataTransfer.files[0]); }}>
               <div className="document-list">
                 {documentsLoading ? (
                   <div className="documents-empty">Loading documents…</div>
@@ -732,7 +763,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                     <strong>No documents yet</strong>
                     <span>Upload a document to start asking questions.</span>
                   </div>
-                ) : documents.map((document) => (
+                ) : visibleDocuments.length === 0 ? (<div className="documents-empty"><strong>No matching documents</strong><span>Try another filename.</span></div>) : visibleDocuments.map((document) => (
                   <article className="document-card" key={document.document_id}>
                     <div className="document-icon">DOC</div>
                     <div className="document-info">
@@ -750,7 +781,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                   </article>
                 ))}
               </div>
-              <div className="upload-hint">Supported: PDF, DOCX, TXT, MD</div>
+              <div className="upload-hint">{dragActive ? "Release to upload" : uploading ? "Indexing — keep this page open" : "Drop files here or choose Upload · PDF, DOCX, TXT, MD · 10 MB max"}</div></div>
             </aside>
           </aside>
 
@@ -767,12 +798,12 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
               <div className="conversation-loading-state" role="status">Restoring conversation history…</div>
             ) : messages.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">⌕</div>
-                <h2>Ask something about your documents</h2>
-                <p>LocalRAG retrieves relevant document chunks and uses them as context for the answer. Your questions and answers are saved in the selected conversation.</p>
+                <div className="empty-icon">✦</div>
+                <h2>Turn documents into answers.</h2>
+                <p>{documents.length === 0 ? "Upload a document to begin. Your answers will link back to the source passages." : "Ask a question, compare ideas, or explore the evidence in your document library."}</p>
                 <div className="suggestions">
-                  <button type="button" onClick={() => setQuestion("What does LocalRAG use for vector storage?")}>What does LocalRAG use for vector storage?</button>
-                  <button type="button" onClick={() => setQuestion("How does LocalRAG retrieve relevant documents?")}>How does document retrieval work?</button>
+                  <button type="button" onClick={() => setQuestion("Summarize the key ideas in my documents.")}>✦ Summarize my documents</button>
+                  <button type="button" onClick={() => setQuestion("What are the most important findings?")}>⌕ Find key findings</button>
                 </div>
               </div>
             ) : (
@@ -788,6 +819,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                         ? "This response failed to generate. You can ask another question to continue this conversation."
                         : message.content}
                     </div>
+                    {message.role === "assistant" && message.status === "complete" && <div className="answer-actions"><button type="button" onClick={() => void copyText(message.content)}>⧉ Copy answer</button></div>}
                     {message.role === "assistant" && message.status === "pending" && (
                       <div className="message-status" role="status">Response pending…</div>
                     )}
@@ -848,10 +880,11 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                 }}
               />
               <button type="submit" className="send-button" disabled={!question.trim() || isLoading || messagesLoading}>
-                {isLoading ? "…" : "Send"}
+                {isLoading ? "…" : "Send ↗"}
               </button>
             </form>
-            <p className="composer-hint">Press Enter to send · Shift + Enter for a new line</p>
+            <p className="composer-hint">{documents.length === 0 ? "Upload a document to ground your answers in evidence." : "Enter to send · Shift + Enter for a new line · Answers link to sources."}</p>
+            {copyNotice && <div className="copy-notice" role="status">{copyNotice}<button type="button" onClick={() => setCopyNotice(null)}>×</button></div>}
           </section>
 
           <aside className={`evidence-panel${evidencePanelCollapsed ? " evidence-panel-collapsed" : ""}`} aria-label="Retrieved evidence">
@@ -877,9 +910,9 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                 {sourcePreviewLoading && <p role="status">Loading source passage…</p>}
                 {sourcePreviewError && <p role="alert">{sourcePreviewError}</p>}
                 {sourcePreview && (
-                  <section aria-label="Cited source text" style={{ padding: 12, border: "1px solid currentColor", borderRadius: 8 }}>
+                  <section className="source-preview-card" aria-label="Cited source text">
                     <strong>{sourcePreview.filename} — chunk {sourcePreview.chunk_id}</strong>
-                    <button type="button" onClick={() => setSourcePreview(null)} aria-label="Close source passage">Close</button>
+                    <button type="button" onClick={() => void copyText(sourcePreview.text)}>Copy passage</button><button type="button" onClick={() => setSourcePreview(null)} aria-label="Close source passage">Close</button>
                     <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{sourcePreview.text}</p>
                   </section>
                 )}
@@ -892,7 +925,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                 ) : evidenceSources.map((source, index) => (
                   <article className="evidence-card" key={`${source.document_id}-${source.chunk_id}-${index}`}>
                     <div className="evidence-card-top">
-                      <span className="evidence-document-mark">PDF</span>
+                      <span className="evidence-document-mark">{source.filename.split(".").pop()?.toUpperCase() ?? "DOC"}</span>
                       <span className="evidence-score">{source.score.toFixed(2)}</span>
                     </div>
                     <strong className="evidence-filename" title={source.filename}>{source.filename}</strong>
