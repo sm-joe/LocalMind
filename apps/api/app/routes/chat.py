@@ -98,6 +98,7 @@ def create_rag_service() -> RAGService:
     llm_service = LLMService(
         base_url=settings.ollama_base_url,
         model=settings.llm_model,
+        num_ctx=settings.ollama_num_ctx,
     )
 
     return RAGService(
