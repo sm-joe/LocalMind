@@ -27,7 +27,16 @@ class LLMService:
             model=self.model,
             # Retrieval prompts contain multiple source passages and citation
             # markers. Ollama's default context may truncate those passages.
-            options={"num_ctx": self.num_ctx},
+            options={
+                "num_ctx": self.num_ctx,
+                "num_predict": 512,
+                "temperature": 0.2,
+            },
+            # Qwen3 is a reasoning-capable model. Its default thinking mode
+            # can spend most of a CPU-only request on hidden deliberation
+            # rather than emitting a cited answer. Use direct generation for
+            # interactive document Q&A. Older non-thinking models omit this.
+            **({"think": False} if self.model.lower().startswith("qwen3") else {}),
             messages=[
                 {
                     "role": "user",
