@@ -325,18 +325,27 @@ class RAGService:
         summary = self._is_summary_request(normalized)
         requested_count_match = self.REQUESTED_COUNT_PATTERN.search(normalized)
         document_wide = summary or bool(requested_count_match)
+        comparison = re.search(
+            r"\\b(?:difference between|compare)\\s+([a-z0-9-]+)\\s+"
+            r"(?:and|vs\\.?|versus)\\s+([a-z0-9-]+)\\b",
+            normalized, re.IGNORECASE,
+        )
         retrieval = self.retrieval_service
         if document_id:
             result = retrieval.retrieve_document_by_id(document_id, normalized)
         elif document_wide:
             result = retrieval.retrieve_document(normalized, limit=top_k)
+        elif comparison and hasattr(retrieval, "retrieve_comparison"):
+            result = retrieval.retrieve_comparison(
+                normalized, comparison.group(1), comparison.group(2), limit=4
+            )
         else:
             result = retrieval.retrieve(normalized, limit=min(top_k, 3))
         # Broad document tasks must see the full source, not just the three
         # highest-matching chunks. Sample sections in source order within
         # a bounded CPU-friendly prompt.
         candidates = result.chunks
-        count = 12 if document_wide else 3
+        count = 12 if document_wide else (4 if comparison else 3)
         if document_wide and len(candidates) > count:
             indices = [
                 (i * (len(candidates) - 1)) // (count - 1)
@@ -400,15 +409,31 @@ class RAGService:
             answer = self._validate_citations(raw_answer, len(chunks))
             if requested_count_match and answer != self.INVALID_CITATION_ANSWER:
                 answer = self._verify_extracted_list(answer, chunks)
+            if comparison and answer != self.INVALID_CITATION_ANSWER:
+                # A citation to IAM-only text does not answer EC2 vs IAM.
+                # Require the answer to address both named subjects.
+                requested = (comparison.group(1), comparison.group(2))
+                if not all(
+                    re.search(
+                        rf"(?<![a-z0-9]){re.escape(term.casefold())}(?![a-z0-9])",
+                        answer.casefold(),
+                    ) for term in requested
+                ):
+                    answer = self.INVALID_CITATION_ANSWER
             if answer == self.INVALID_CITATION_ANSWER:
                 # A formatting error is not a summary error. Preserve useful
                 # synthesis, but clearly disclose that individual claims
                 # have not been linked to a supporting chunk. Never make up
                 # citation markers or replace the summary with chopped text.
                 answer = (
-                    "Unverified answer (the model omitted valid citations):\n\n"
-                    + raw_answer
-                    if raw_answer else self.INVALID_CITATION_ANSWER
+                    "I couldn't verify an answer that compares both "
+                    f"{comparison.group(1).upper()} and {comparison.group(2).upper()} "
+                    "using the retrieved document passages."
+                    if comparison else (
+                        "Unverified answer (citation or source validation failed):\n\n"
+                        + raw_answer
+                        if raw_answer else self.INVALID_CITATION_ANSWER
+                    )
                 )
         else:
             answer = self.NO_CONTEXT_ANSWER
