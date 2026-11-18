@@ -269,13 +269,16 @@ class RAGService:
             # For requested document-wide lists, an ungrounded generation
             # must never become an invented answer. Return only verbatim
             # indexed passages, each with its actual source citation.
-            if (
-                answer == self.INVALID_CITATION_ANSWER
-                and requested_count_match
-            ):
+            if answer == self.INVALID_CITATION_ANSWER and summary_mode:
+                # Local 3B models sometimes omit all citation markers even
+                # after a correction pass. Never invent support: return a
+                # clearly labelled extractive fallback with real citations.
                 answer = self._verbatim_excerpts(
                     chunks=chunks,
-                    requested_count=int(requested_count_match.group(1)),
+                    requested_count=(
+                        int(requested_count_match.group(1))
+                        if requested_count_match else min(6, len(chunks))
+                    ),
                 )
 
         sources = [
