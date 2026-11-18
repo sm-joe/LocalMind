@@ -12,7 +12,7 @@ cp -n .env.example .env
 python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ~~~
 
-Set distinct secrets in .env: POSTGRES_PASSWORD, LOCALRAG_API_KEY (32+ characters), LOCALRAG_ADMIN_PASSWORD (12+ characters), and LOCALRAG_SESSION_SECRET (32+ characters). The LOCALRAG_* keys remain for runtime backwards compatibility after branding becomes LocalMind.
+Set distinct secrets in .env: POSTGRES_PASSWORD, LOCALMIND_API_KEY (32+ characters), LOCALMIND_ADMIN_PASSWORD (12+ characters), and LOCALMIND_SESSION_SECRET (32+ characters). New installs use LOCALMIND_* keys. Existing LOCALRAG_* credentials continue working through Compose compatibility aliases.
 
 ~~~bash
 docker compose config --quiet
