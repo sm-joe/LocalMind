@@ -85,3 +85,28 @@ def test_comparison_does_not_guess_when_one_subject_missing():
         "difference between ec2 and iam", "ec2", "iam"
     )
     assert result.chunks == []
+
+
+def test_real_audit_style_ec2_iam_prioritizes_definition_over_role_example():
+    """Reproduce indexed DOCX chunk ordering reported by the operator."""
+    class Embedding:
+        def embed(self, query):
+            raise AssertionError("Comparison evidence comes from indexed chunks.")
+
+    class Store:
+        def iter_points(self):
+            yield point(0, "Shared responsibility includes IAM permissions.")
+            yield point(1, "2. IAM and Security 6. What is AWS IAM? Answer: IAM (Identity and Access Management) controls who can access AWS resources and which actions they can perform.")
+            yield point(2, "Why should IAM Roles be preferred over access keys for EC2? Answer: IAM Roles provide temporary credentials and avoid storing AWS access keys on EC2.")
+            yield point(5, "An Application Load Balancer distributes traffic to EC2 instances.")
+            yield point(6, "An Auto Scaling Group launches EC2 instances according to demand.")
+            yield point(9, "Architecture: Route 53, an EC2 Auto Scaling Group and an RDS database.")
+
+    result = RetrievalService(Embedding(), Store()).retrieve_comparison(
+        "difference between ec2 and iam", "ec2", "iam"
+    )
+    assert result.diagnostics.has_context
+    # The genuine IAM definition, not IAM Role-vs-User details, must be
+    # the first IAM source given to the model.
+    assert result.chunks[1].chunk_id == 1
+    assert result.chunks[0].chunk_id != 2
