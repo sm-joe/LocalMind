@@ -186,7 +186,7 @@ jobs:
 
       - name: Validate RAG retrieval, summary and citations
         run: |
-          python -m pytest -q tests/test_rag_streaming.py tests/test_corpus_summary.py tests/test_llm_context.py tests/test_rag_safety.py tests/test_retrieval.py tests/test_rag_document_lists.py tests/test_vector_store.py tests/test_product_reliability.py
+          python -m pytest -q tests/test_comparison_qa.py tests/test_rag_streaming.py tests/test_corpus_summary.py tests/test_llm_context.py tests/test_rag_safety.py tests/test_retrieval.py tests/test_rag_document_lists.py tests/test_vector_store.py tests/test_product_reliability.py
 
   web-build:
     name: Product Web Build
