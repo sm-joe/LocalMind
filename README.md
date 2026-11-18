@@ -41,9 +41,9 @@ Set **distinct** private values in .env for:
 | Variable | Purpose |
 | --- | --- |
 | POSTGRES_PASSWORD | Strong PostgreSQL credential |
-| LOCALRAG_API_KEY | Backend API key, at least 32 characters |
-| LOCALRAG_ADMIN_PASSWORD | Browser sign-in password, at least 12 characters |
-| LOCALRAG_SESSION_SECRET | Signing secret, at least 32 characters |
+| LOCALMIND_API_KEY | Backend API key, at least 32 characters |
+| LOCALMIND_ADMIN_PASSWORD | Browser sign-in password, at least 12 characters |
+| LOCALMIND_SESSION_SECRET | Signing secret, at least 32 characters |
 
 Generate independent values for each secret. Never commit .env or share secrets in logs or chat.
 
@@ -61,7 +61,7 @@ The one-shot ollama-init service provisions configured models during initial sta
 
 ### 4. Sign In And Check Readiness
 
-Open **http://localhost:3000** and use the LOCALRAG_ADMIN_PASSWORD configured in .env.
+Open **http://localhost:3000** and use the LOCALMIND_ADMIN_PASSWORD configured in .env.
 
 ~~~bash
 curl -fsS http://127.0.0.1:8000/health
@@ -152,10 +152,10 @@ The LocalMind backup command delegates to the existing, backward-compatible back
 After uploading the evaluation fixture, run a real model-based evaluation:
 
 ~~~bash
-export LOCALRAG_API_KEY='your-private-api-key'
-export LOCALRAG_EVAL_API_URL='http://127.0.0.1:8000/chat'
+export LOCALMIND_API_KEY='your-private-api-key'
+export LOCALMIND_EVAL_API_URL='http://127.0.0.1:8000/chat'
 python3 evals/run_evaluation.py
-unset LOCALRAG_API_KEY LOCALRAG_EVAL_API_URL
+unset LOCALMIND_API_KEY LOCALMIND_EVAL_API_URL
 ~~~
 
 Unit tests, CI checks and model-based acceptance are separate quality gates.
@@ -178,7 +178,7 @@ git remote set-url origin https://github.com/sm-joe/localmind.git
 docker compose ps
 ~~~
 
-The old API keys and database credentials remain valid; do not regenerate them solely for rebranding.
+The existing legacy secret variables, API keys and database credentials remain valid; do not regenerate them solely for rebranding.
 
 ## Runtime Configuration
 
@@ -189,9 +189,9 @@ The old API keys and database credentials remain valid; do not regenerate them s
 | OLLAMA_NUM_CTX | 6144 |
 | QDRANT_HOST / QDRANT_PORT | qdrant / 6333 |
 | OLLAMA_BASE_URL | http://ollama:11434 |
-| LOCALRAG_API_KEY | Required server-side API key |
-| LOCALRAG_ADMIN_PASSWORD | Required single-user login |
-| LOCALRAG_SESSION_SECRET | Signed session secret |
+| LOCALMIND_API_KEY | Required server-side API key |
+| LOCALMIND_ADMIN_PASSWORD | Required single-user login |
+| LOCALMIND_SESSION_SECRET | Signed session secret |
 
 Uploaded files are limited to 10 MiB. Additional parser limits include 200 PDF pages, 10,000 DOCX paragraphs and 2 million extracted characters.
 
