@@ -172,6 +172,81 @@ class RetrievalService:
             total_start=total_start,
         )
 
+    def retrieve_comparison(
+        self, query: str, left: str, right: str, limit: int = 4
+    ) -> RetrievalResult:
+        """Find evidence for BOTH subjects of an explicit comparison.
+
+        Small document libraries can scatter definitions across distant chunks.
+        A single embedding of the whole comparison often retrieves only one.
+        Scan indexed text for both requested terms, retaining only real chunks.
+        """
+        if limit <= 0:
+            raise ValueError("Search limit must be greater than zero.")
+        start = perf_counter()
+        def contains(term: str, text: str) -> bool:
+            return bool(re.search(
+                rf"(?<![a-z0-9]){re.escape(term.casefold())}(?![a-z0-9])",
+                text.casefold(),
+            ))
+        both: list[RetrievedChunk] = []
+        left_only: list[RetrievedChunk] = []
+        right_only: list[RetrievedChunk] = []
+        seen: set[tuple[str, int]] = set()
+        examined = 0
+        for point in self.vector_store.iter_points():
+            if examined >= 10000:
+                break
+            examined += 1
+            chunk = self._build_chunk(point.payload or {}, 0.0)
+            if chunk is None or (chunk.document_id, chunk.chunk_id) in seen:
+                continue
+            seen.add((chunk.document_id, chunk.chunk_id))
+            has_left = contains(left, chunk.text)
+            has_right = contains(right, chunk.text)
+            if has_left and has_right:
+                both.append(chunk)
+            elif has_left:
+                left_only.append(chunk)
+            elif has_right:
+                right_only.append(chunk)
+        # Preserve evidence for BOTH subjects rather than allowing the
+        # more frequent name to crowd out the other.
+        selected: list[RetrievedChunk] = both[:limit]
+        for group in (left_only, right_only):
+            if group and len(selected) < limit:
+                selected.append(group[0])
+        for group in (left_only[1:], right_only[1:]):
+            for chunk in group:
+                if len(selected) >= limit:
+                    break
+                selected.append(chunk)
+        selected = selected[:limit]
+        # An answer would be deceptive if the document never mentions one
+        # of the requested concepts. Do not ask Ollama to guess that half.
+        if not any(contains(left, c.text) for c in selected) or not any(
+            contains(right, c.text) for c in selected
+        ):
+            selected = []
+        elapsed = round((perf_counter() - start) * 1000, 2)
+        return RetrievalResult(
+            chunks=selected,
+            diagnostics=RetrievalDiagnostics(
+                requested_limit=limit,
+                candidate_count=examined,
+                returned_count=len(selected),
+                filtered_count=max(0, examined - len(selected)),
+                top_candidate_score=None,
+                bottom_candidate_score=None,
+                top_score=None,
+                bottom_score=None,
+                has_context=bool(selected),
+            ),
+            performance=RetrievalPerformance(
+                embedding_ms=0.0, search_ms=elapsed, total_ms=elapsed
+            ),
+        )
+
     def retrieve_document_by_id(
         self,
         document_id: str,
