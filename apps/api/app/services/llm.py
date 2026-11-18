@@ -53,3 +53,24 @@ class LLMService:
             )
 
         return content.strip()
+    def stream(self, prompt: str):
+        """Stream Ollama tokens as they are generated (reference project flow)."""
+        if not prompt.strip():
+            raise ValueError("Prompt cannot be empty.")
+        # Do not collect a full response before yielding output: CPU inference
+        # must show progress in the browser as soon as Ollama emits text.
+        options = {
+            "num_ctx": self.num_ctx,
+            "num_predict": 400,
+            "temperature": 0.2,
+        }
+        for item in self.client.generate(
+            model=self.model,
+            prompt=prompt,
+            stream=True,
+            options=options,
+            **({"think": False} if self.model.lower().startswith("qwen3") else {}),
+        ):
+            token = item.get("response", "") if isinstance(item, dict) else getattr(item, "response", "")
+            if token:
+                yield token
