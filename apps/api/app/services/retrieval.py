@@ -272,36 +272,38 @@ class RetrievalService:
         # E.g. "Why use IAM roles on EC2?" must not outrank
         # "What is AWS IAM? Answer: IAM controls who can access ...".
         def definition_score(chunk: RetrievedChunk, term: str) -> tuple[int, int]:
-            found = re.search(
+            pattern = re.compile(
                 rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])",
-                chunk.text, re.IGNORECASE,
-            )
-            if not found:
-                return (-1, 0)
-            before = chunk.text[max(0, found.start() - 48):found.start()]
-            after = chunk.text[found.end():found.end() + 180]
-            question = bool(re.search(
-                rf"(?:what is|define|explain)\s+(?:aws|amazon)?\s*$",
-                before, re.IGNORECASE,
-            ))
-            description = bool(re.search(
-                r"^\s*(?:\([^)]*\))?\s*(?:is|provides|allows|manages|"
-                r"controls|offers|enables)\b", after, re.IGNORECASE,
-            ))
-            role_example = bool(re.search(
-                r"\b(?:roles?|keys?|instances?|scaling|load balanc)\b",
-                before[-30:] + after[:60], re.IGNORECASE,
-            ))
-            unrelated_role_question = bool(re.search(
-                r"why should.*(?:iam roles?|access keys?)",
-                chunk.text[max(0, found.start() - 110):found.start()],
                 re.IGNORECASE,
-            ))
-            score = (
-                int(question) * 5 + int(description) * 4
-                - int(role_example) - 4 * int(unrelated_role_question)
             )
-            return (score, -chunk.chunk_id)
+            best = -1
+            # A chunk can mention IAM in a section heading and again in
+            # "What is AWS IAM? Answer: ...". Judge EVERY occurrence.
+            for found in pattern.finditer(chunk.text):
+                before = chunk.text[max(0, found.start() - 110):found.start()]
+                after = chunk.text[found.end():found.end() + 180]
+                question = bool(re.search(
+                    r"(?:what is|define|explain)\s+(?:aws|amazon)?\s*$",
+                    before, re.IGNORECASE,
+                ))
+                description = bool(re.search(
+                    r"^\s*(?:\([^)]*\))?\s*(?:is|provides|allows|manages|"
+                    r"controls|offers|enables)\b", after, re.IGNORECASE,
+                ))
+                incidental = bool(re.search(
+                    r"\b(?:roles?|keys?|instances?|scaling|load balanc)\b",
+                    before[-30:] + after[:60], re.IGNORECASE,
+                ))
+                unrelated_role_question = bool(re.search(
+                    r"why should.*(?:iam roles?|access keys?)",
+                    before, re.IGNORECASE,
+                ))
+                score = (
+                    int(question) * 5 + int(description) * 4
+                    - int(incidental) - 4 * int(unrelated_role_question)
+                )
+                best = max(best, score)
+            return (best, -chunk.chunk_id)
 
         left_candidates = sorted(left_only + both,
                                  key=lambda c: definition_score(c, left),
