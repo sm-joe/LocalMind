@@ -1065,49 +1065,98 @@ export default function Home() {
     </main>
   );
   if (!authenticated) return (
-    <main className="auth-shell">
-      <header className="auth-header">
-        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">◆</span><span>localrag</span></div>
-        <span className="auth-header-label"><span className="status-dot" /> SELF-HOSTED KNOWLEDGE WORKSPACE</span>
-      </header>
-      <div className="auth-layout">
-        <section className="auth-story" aria-label="About LocalRAG">
-          <span className="auth-kicker">PRIVATE BY DESIGN · POWERED BY YOUR DATA</span>
-          <h1>Your documents.<br />Your answers.<br /><em>Your control.</em></h1>
-          <p>Turn scattered files into searchable knowledge. Ask better questions, uncover what matters, and see exactly where every answer came from.</p>
-          <div className="auth-steps" aria-label="How it works">
-            <div><span>01</span><div><strong>Bring your knowledge</strong><p>Upload PDFs, Word documents, Markdown, and text files.</p></div></div>
-            <div><span>02</span><div><strong>Ask naturally</strong><p>Explore your library through a conversation.</p></div></div>
-            <div><span>03</span><div><strong>Verify every insight</strong><p>Open the passages behind cited answers.</p></div></div>
+    <main className="auth-shell auth-reading-desk">
+      <div className="auth-page-inner">
+        <header className="auth-header">
+          <div className="brand-lockup">
+            <span className="brand-mark" aria-hidden="true">L<span className="brand-mark-detail">/</span></span>
+            <span>localrag<span className="brand-mark-subtle"> / the reading desk</span></span>
           </div>
-        </section>
-        <section className="auth-card" aria-labelledby="auth-title">
-          <div className="auth-card-icon" aria-hidden="true">✦</div>
-          <p className="eyebrow">WELCOME BACK</p>
-          <h2 id="auth-title">Sign in to LocalRAG</h2>
-          <p className="auth-card-description">Your private knowledge workspace is ready when you are.</p>
-          <form onSubmit={(event) => void signIn(event)}>
-            <label htmlFor="localrag-password">Administrator password</label>
-            <input
-              id="localrag-password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="Enter your administrator password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              aria-invalid={Boolean(loginError)}
-              aria-describedby={loginError ? "auth-error" : undefined}
-            />
-            {loginError && <div id="auth-error" className="auth-error" role="alert">{loginError}</div>}
-            <button type="submit" className="auth-submit" disabled={loggingIn || !password.trim()}>
-              {loggingIn ? "Verifying…" : "Enter workspace"} <span aria-hidden="true">↗</span>
-            </button>
-          </form>
-          <div className="auth-card-foot"><span className="status-dot" /> Runs on your own infrastructure. No cloud account required.</div>
-        </section>
+          <span className="auth-header-label"><span className="status-dot" /> PRIVATE. LOCAL. YOURS.</span>
+        </header>
+
+        <div className="auth-layout">
+          <section className="auth-story" aria-label="About LocalRAG">
+            <div className="auth-editorial-header">
+              <p className="auth-kicker"><span>01 /</span> A HOME FOR YOUR KNOWLEDGE</p>
+              <h1>Less searching.<br /><em>More finding.</em></h1>
+              <p className="auth-story-description">
+                A calm place to read across your documents, ask better questions
+                and follow every answer back to its source.
+              </p>
+            </div>
+            <div className="auth-document-preview" aria-label="Illustration of the LocalRAG document reading workflow">
+              <div className="auth-preview-head">
+                <span>THE READING DESK</span>
+                <span>ANATOMY OF AN ANSWER / 01</span>
+              </div>
+              <div className="auth-preview-paper">
+                <div className="auth-preview-paper-heading">
+                  <span className="auth-preview-file-icon" aria-hidden="true">D</span>
+                  <div><span>YOUR LIBRARY</span><strong>Notes on the things that matter.</strong></div>
+                  <span className="auth-preview-page-number">01—03</span>
+                </div>
+                <p className="auth-preview-label">A QUESTION WORTH ASKING</p>
+                <h2>What does the document<br />actually say?</h2>
+                <div className="auth-preview-rules" aria-hidden="true">
+                  <span /><span /><span />
+                </div>
+                <div className="auth-preview-quote">
+                  <span className="auth-preview-quote-mark" aria-hidden="true">“</span>
+                  <p>Answers grounded in your documents, with the passages beside them.</p>
+                  <span className="auth-preview-citation">SOURCE / 001</span>
+                </div>
+              </div>
+              <div className="auth-preview-bottom"><span>READ</span><span>QUESTION</span><span>TRACE</span></div>
+            </div>
+            <div className="auth-steps" aria-label="How LocalRAG works">
+              <div><span>01</span><div><strong>Collect</strong><p>PDF, Word, Markdown and plain text.</p></div></div>
+              <div><span>02</span><div><strong>Explore</strong><p>Ask questions and connect ideas.</p></div></div>
+              <div><span>03</span><div><strong>Verify</strong><p>Inspect the original passages.</p></div></div>
+            </div>
+          </section>
+
+          <section className="auth-signin-zone" aria-labelledby="auth-title">
+            <div className="auth-signin-topline"><span>YOUR PRIVATE WORKSPACE</span><span>ACCESS / 01</span></div>
+            <div className="auth-card">
+              <div className="auth-card-icon" aria-hidden="true">L<span>/</span></div>
+              <p className="eyebrow">WELCOME BACK</p>
+              <h2 id="auth-title">Make yourself<br /><em>at home.</em></h2>
+              <p className="auth-card-description">
+                Sign in to continue your research, documents and conversations.
+              </p>
+              <form onSubmit={(event) => void signIn(event)}>
+                <label htmlFor="localrag-password">Administrator password</label>
+                <input
+                  id="localrag-password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  aria-invalid={Boolean(loginError)}
+                  aria-describedby={loginError ? "auth-error" : undefined}
+                />
+                {loginError && <div id="auth-error" className="auth-error" role="alert">{loginError}</div>}
+                <button type="submit" className="auth-submit" disabled={loggingIn || !password.trim()}>
+                  <span>{loggingIn ? "Verifying access…" : "Open your desk"}</span><span aria-hidden="true">↗</span>
+                </button>
+              </form>
+              <div className="auth-card-foot">
+                <span className="auth-privacy-mark" aria-hidden="true">●</span>
+                Self-hosted. Your files stay in your environment.
+              </div>
+            </div>
+            <p className="auth-signin-note">A PERSONAL SPACE FOR THOUGHTFUL WORK.</p>
+          </section>
+        </div>
+
+        <footer className="auth-footer">
+          <span>LOCALRAG / THE READING DESK</span>
+          <span>DOCUMENTS IN. CLARITY OUT.</span>
+        </footer>
       </div>
-      <footer className="auth-footer"><span>LOCALRAG · LOCAL-FIRST INTELLIGENCE</span><span>Ollama / Qdrant / FastAPI</span></footer>
     </main>
   );
   return <Workspace onLogout={() => void signOut()} />;
