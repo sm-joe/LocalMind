@@ -21,6 +21,9 @@ class LLMService:
 
         response = self.client.chat(
             model=self.model,
+            # Retrieval prompts contain multiple source passages and citation
+            # markers. Ollama's default context may truncate those passages.
+            options={"num_ctx": 8192},
             messages=[
                 {
                     "role": "user",
