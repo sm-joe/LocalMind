@@ -446,20 +446,27 @@ class RAGService:
                 ):
                     answer = self.INVALID_CITATION_ANSWER
             if answer == self.INVALID_CITATION_ANSWER:
-                # A formatting error is not a summary error. Preserve useful
-                # synthesis, but clearly disclose that individual claims
-                # have not been linked to a supporting chunk. Never make up
-                # citation markers or replace the summary with chopped text.
-                answer = (
-                    self._comparison_evidence_answer(
+                if comparison:
+                    answer = self._comparison_evidence_answer(
                         chunks, comparison.group(1), comparison.group(2)
                     )
-                    if comparison else (
+                elif summary and raw_answer:
+                    # A document-wide synthesis is not the same as a cited
+                    # fact lookup. Keep the substantive summary when the
+                    # model omits inline markers, but state the limitation.
+                    # Never manufacture citations or mark its individual
+                    # claims as verified merely because sources exist.
+                    answer = (
+                        raw_answer + "\n\n"
+                        "Source passages are available below; individual "
+                        "summary statements do not have verified inline citations."
+                    )
+                else:
+                    answer = (
                         "Unverified answer (citation or source validation failed):\n\n"
                         + raw_answer
                         if raw_answer else self.INVALID_CITATION_ANSWER
                     )
-                )
         else:
             if named_entity:
                 answer = (
