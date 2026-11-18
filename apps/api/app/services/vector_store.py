@@ -182,6 +182,11 @@ class VectorStore:
             raise ValueError(
                 "Limit must be greater than zero."
             )
+        # An empty installation has no collection yet; allow the UI to
+        # report "upload documents" rather than raising Qdrant HTTP 404.
+        existing = self.client.get_collections().collections
+        if not any(item.name == self.collection_name for item in existing):
+            return
         offset: Any = None
 
         while True:
