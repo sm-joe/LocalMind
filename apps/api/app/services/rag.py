@@ -451,9 +451,9 @@ class RAGService:
                 # have not been linked to a supporting chunk. Never make up
                 # citation markers or replace the summary with chopped text.
                 answer = (
-                    "I couldn't verify an answer that compares both "
-                    f"{comparison.group(1).upper()} and {comparison.group(2).upper()} "
-                    "using the retrieved document passages."
+                    self._comparison_evidence_answer(
+                        chunks, comparison.group(1), comparison.group(2)
+                    )
                     if comparison else (
                         "Unverified answer (citation or source validation failed):\n\n"
                         + raw_answer
@@ -482,6 +482,37 @@ class RAGService:
                 total_ms=round((perf_counter() - started) * 1000, 2),
             ),
         ))
+
+    @classmethod
+    def _comparison_evidence_answer(
+        cls, chunks: list[RetrievedChunk], left: str, right: str
+    ) -> str:
+        """Return honest, cited definitions if LLM comparison fails validation.
+
+        Never invent sources or conceal a failure with a generic response.
+        Keep excerpts brief and prefer source sentences that define a subject.
+        """
+        lines = []
+        for label in (left, right):
+            pattern = re.compile(
+                rf"(?<![a-z0-9]){re.escape(label)}(?![a-z0-9])",
+                re.IGNORECASE,
+            )
+            options = []
+            for source_id, chunk in enumerate(chunks, 1):
+                for sentence in re.split(r"(?<=[.!?])\\s+", chunk.text):
+                    if pattern.search(sentence):
+                        sentence = " ".join(sentence.split())
+                        definitional = bool(re.search(
+                            r"\\b(?:is|provides|manages|allows|offers|used for)\\b",
+                            sentence, re.IGNORECASE
+                        ))
+                        options.append((definitional, -len(sentence), source_id, sentence))
+            if not options:
+                return cls.NO_CONTEXT_ANSWER
+            _, _, source_id, sentence = max(options)
+            lines.append(f"**{label.upper()}:** {sentence[:350]} [{source_id}]")
+        return "From the indexed document:\\n\\n" + "\\n".join(lines)
 
     @classmethod
     def _comparison_claims_supported(
