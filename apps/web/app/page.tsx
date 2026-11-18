@@ -701,7 +701,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       <aside className="lm-sidebar" aria-label="Main navigation">
         <div className="lm-brand"><span className="lm-brand-symbol" aria-hidden="true">m.</span><span>LocalMind</span></div>
         <div className="lm-workspace-select"><span className="lm-workspace-avatar">L</span><div><strong>Personal Workspace</strong><small>Private Knowledge Base</small></div></div>
-        <div className="lm-nav-label">WORKSPACE</div>
+        <div className="lm-nav-label">Workspace</div>
         <nav className="lm-navigation">
           <button type="button" className={activeView === "library" ? "lm-nav-link active" : "lm-nav-link"} aria-current={activeView === "library" ? "page" : undefined} onClick={() => setActiveView("library")}>
             <span aria-hidden="true">▦</span> Documents <small>{documents.length}</small>
@@ -713,7 +713,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             <span aria-hidden="true">▤</span> Conversations <small>{conversations.filter((item) => !item.is_archived).length}</small>
           </button>
         </nav>
-        <div className="lm-nav-label lm-quick-heading">QUICK ACTIONS</div>
+        <div className="lm-nav-label lm-quick-heading">Quick Actions</div>
         <button type="button" className="lm-sidebar-action" onClick={openFilePicker} disabled={uploading}>+ Add Documents</button>
         <button type="button" className="lm-sidebar-action muted" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Research Thread</button>
         <div className="lm-sidebar-bottom"><span className="lm-local-indicator" /> Local Workspace <small>Your Files Stay In Your Environment</small></div>
@@ -728,7 +728,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           {activeView === "library" && (
             <section className="lm-view lm-library" aria-label="Document library">
               <div className="lm-page-header">
-                <div><p className="lm-overline">YOUR WORKSPACE / FILE MANAGEMENT</p><h1>Documents</h1><p>Keep Your Knowledge Organized, Searchable, And Ready To Explore.</p></div>
+                <div><p className="lm-overline">Your Workspace / File Management</p><h1>Documents</h1><p>Keep Your Knowledge Organized, Searchable, And Ready To Explore.</p></div>
                 <button className="lm-primary-button" type="button" onClick={openFilePicker} disabled={uploading}>{uploading ? "Indexing..." : "+ Upload Documents"}</button>
               </div>
               <div className="lm-stats">
@@ -749,7 +749,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                   {["all", "pdf", "docx", "txt", "md"].map((type) => <button type="button" key={type} aria-pressed={fileTypeFilter === type} className={fileTypeFilter === type ? "active" : ""} onClick={() => setFileTypeFilter(type)}>{type === "all" ? "All Files" : type.toUpperCase()}</button>)}
                 </div>
                 <div className="lm-file-table" role="table" aria-label="Indexed Documents">
-                  <div className="lm-file-row lm-file-thead" role="row"><span role="columnheader">NAME</span><span role="columnheader">TYPE</span><span role="columnheader">INDEXED CONTENT</span><span role="columnheader">ACTIONS</span></div>
+                  <div className="lm-file-row lm-file-thead" role="row"><span role="columnheader">Name</span><span role="columnheader">Type</span><span role="columnheader">Indexed Content</span><span role="columnheader">Actions</span></div>
                   {documentsLoading ? <div className="lm-table-empty" role="status">Loading Your Library...</div> :
                    visibleDocuments.length === 0 ? <div className="lm-table-empty"><strong>{documents.length === 0 ? "Your Library Is Empty" : "No Matching Files"}</strong><p>{documents.length === 0 ? "Add A Document Above To Start Exploring." : "Try A Different Search Or File Type."}</p></div> :
                    visibleDocuments.map((document) => (
@@ -770,7 +770,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
 
           {activeView === "history" && (
             <section className="lm-view lm-history" aria-label="Conversation History">
-              <div className="lm-page-header"><div><p className="lm-overline">YOUR RESEARCH ARCHIVE</p><h1>Conversations</h1><p>Find, Continue And Organize Your Saved Research Threads.</p></div><button type="button" className="lm-primary-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Conversation</button></div>
+              <div className="lm-page-header"><div><p className="lm-overline">Your Research Archive</p><h1>Conversations</h1><p>Find, Continue And Organize Your Saved Research Threads.</p></div><button type="button" className="lm-primary-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Conversation</button></div>
               <div className="lm-history-panel">
                 <div className="lm-section-header"><div><h2>{showArchived ? "Archived Conversations" : "Recent Conversations"}</h2><p>{visibleConversations.length} threads</p></div><div className="lm-history-tools"><label className="lm-search"><span aria-hidden="true">⌕</span><input type="search" aria-label="Find A Conversation" placeholder="Search Conversations" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} /></label><button type="button" className="lm-outline-button" onClick={() => setShowArchived((v) => !v)}>{showArchived ? "Show Active" : "Archived"}</button></div></div>
                 {conversationError && <div className="lm-error" role="alert">{conversationError}</div>}
@@ -793,11 +793,11 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
 
           {activeView === "research" && (
             <section className="lm-view lm-research" aria-label="Document Research">
-              <div className="lm-page-header lm-research-header"><div><p className="lm-overline">ASK &amp; VERIFY / RESEARCH</p><h1>Research</h1><p>Explore Your Material And Inspect The Passages Behind Each Answer.</p></div><button type="button" className="lm-outline-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Thread</button></div>
+              <div className="lm-page-header lm-research-header"><div><p className="lm-overline">Ask &amp; Verify / Research</p><h1>Research</h1><p>Explore Your Material And Inspect The Passages Behind Each Answer.</p></div><button type="button" className="lm-outline-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Thread</button></div>
               <div className="lm-scope-toolbar"><label htmlFor="lm-document-scope">Source Collection</label><select id="lm-document-scope" value={selectedDocumentId ?? ""} onChange={(event) => setSelectedDocumentId(event.target.value || null)}><option value="">All Documents</option>{documents.map((doc) => <option value={doc.document_id} key={doc.document_id}>{doc.filename}</option>)}</select><span>{selectedDocument ? "Questions Are Limited To This Document" : "Search Across Your Indexed Library"}</span></div>
               <div className="lm-research-grid">
                 <section className="lm-answer-panel" aria-label="Question And Answer">
-                  <div className="lm-answer-header"><div><small>ACTIVE THREAD</small><h2>{activeConversation?.title ?? "New Research"}</h2></div><span>{messages.length} messages</span></div>
+                  <div className="lm-answer-header"><div><small>Active Thread</small><h2>{activeConversation?.title ?? "New Research"}</h2></div><span>{messages.length} messages</span></div>
                   {messagesLoading ? <div className="lm-answer-empty" role="status">Opening Conversation...</div> :
                     messages.length === 0 ? (
                       <div className="lm-answer-empty"><span className="lm-answer-empty-icon" aria-hidden="true">⌕</span><h2>Start With A Question.</h2><p>Summarize A File, Explore A Concept Or Compare Two Ideas. The Source Passages Appear Alongside Each Answer.</p><div className="lm-starter-prompts"><button type="button" onClick={() => setQuestion("Summarize the document.")}>Summarize The Document ↗</button><button type="button" onClick={() => setQuestion("What are the key topics covered?")}>Find Key Topics ↗</button></div></div>
@@ -807,11 +807,11 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                   {copyNotice && <div className="lm-notice" role="status">{copyNotice}<button type="button" onClick={() => setCopyNotice(null)}>×</button></div>}
                 </section>
                 <aside className="lm-evidence-panel" aria-label="Source Evidence">
-                  <div className="lm-evidence-header"><div><small>REFERENCES</small><h2>Source Evidence</h2><p>{evidenceSources.length} Passages From The Latest Answer</p></div><button type="button" aria-label={evidencePanelCollapsed ? "Expand Sources" : "Collapse Sources"} aria-expanded={!evidencePanelCollapsed} onClick={() => setEvidencePanelCollapsed((v) => !v)}>{evidencePanelCollapsed ? "+" : "−"}</button></div>
+                  <div className="lm-evidence-header"><div><small>References</small><h2>Source Evidence</h2><p>{evidenceSources.length} Passages From The Latest Answer</p></div><button type="button" aria-label={evidencePanelCollapsed ? "Expand Sources" : "Collapse Sources"} aria-expanded={!evidencePanelCollapsed} onClick={() => setEvidencePanelCollapsed((v) => !v)}>{evidencePanelCollapsed ? "+" : "−"}</button></div>
                   {!evidencePanelCollapsed && <div className="lm-evidence-body">
                     {sourcePreviewLoading && <p role="status">Loading Source Passage...</p>}
                     {sourcePreviewError && <p role="alert" className="lm-error">{sourcePreviewError}</p>}
-                    {sourcePreview && <section className="lm-source-preview"><div><strong>{sourcePreview.filename}</strong><button type="button" onClick={() => setSourcePreview(null)}>Close</button></div><small>PASSAGE {sourcePreview.chunk_id}</small><p>{sourcePreview.text}</p><button type="button" className="lm-outline-button" onClick={() => void copyText(sourcePreview.text)}>Copy Passage</button></section>}
+                    {sourcePreview && <section className="lm-source-preview"><div><strong>{sourcePreview.filename}</strong><button type="button" onClick={() => setSourcePreview(null)}>Close</button></div><small>Passage {sourcePreview.chunk_id}</small><p>{sourcePreview.text}</p><button type="button" className="lm-outline-button" onClick={() => void copyText(sourcePreview.text)}>Copy Passage</button></section>}
                     {evidenceSources.length === 0 ? <div className="lm-evidence-empty"><span aria-hidden="true">▤</span><strong>Evidence, Not Guesswork.</strong><p>Retrieved Source Passages Will Appear Here After Your Question.</p></div> :
                     evidenceSources.map((source, index) => <article className="lm-evidence-item" key={source.document_id + "-" + source.chunk_id + "-" + index}><span className="lm-citation">{source.citation}</span><div><strong title={source.filename}>{source.filename}</strong><small>Passage {source.chunk_id}</small><button type="button" onClick={() => void previewSource(source)}>Read Original Passage ↗</button></div></article>)}
                   </div>}
@@ -896,16 +896,16 @@ export default function Home() {
             </div>
             <div className="auth-document-preview" aria-label="Illustration of the LocalMind document reading workflow">
               <div className="auth-preview-head">
-                <span>THE READING DESK</span>
-                <span>ANATOMY OF AN ANSWER / 01</span>
+                <span>The Reading Desk</span>
+                <span>Anatomy Of An Answer / 01</span>
               </div>
               <div className="auth-preview-paper">
                 <div className="auth-preview-paper-heading">
                   <span className="auth-preview-file-icon" aria-hidden="true">D</span>
-                  <div><span>YOUR LIBRARY</span><strong>Notes On The Things That Matter.</strong></div>
+                  <div><span>Your Library</span><strong>Notes On The Things That Matter.</strong></div>
                   <span className="auth-preview-page-number">01—03</span>
                 </div>
-                <p className="auth-preview-label">A QUESTION WORTH ASKING</p>
+                <p className="auth-preview-label">A Question Worth Asking</p>
                 <h2>What Does The Document<br />Actually Say?</h2>
                 <div className="auth-preview-rules" aria-hidden="true">
                   <span /><span /><span />
@@ -913,23 +913,23 @@ export default function Home() {
                 <div className="auth-preview-quote">
                   <span className="auth-preview-quote-mark" aria-hidden="true">“</span>
                   <p>Answers Grounded In Your Documents, With The Passages Beside Them.</p>
-                  <span className="auth-preview-citation">SOURCE / 001</span>
+                  <span className="auth-preview-citation">Source / 001</span>
                 </div>
               </div>
-              <div className="auth-preview-bottom"><span>READ</span><span>QUESTION</span><span>TRACE</span></div>
+              <div className="auth-preview-bottom"><span>Read</span><span>Question</span><span>Trace</span></div>
             </div>
-            <div className="auth-steps" aria-label="How LocalMind works">
+            <div className="auth-steps" aria-label="How LocalMind Works">
               <div><span>01</span><div><strong>Collect</strong><p>PDF, Word, Markdown And Plain Text.</p></div></div>
-              <div><span>02</span><div><strong>Explore</strong><p>Ask Questions and connect ideas.</p></div></div>
+              <div><span>02</span><div><strong>Explore</strong><p>Ask Questions And Connect Ideas.</p></div></div>
               <div><span>03</span><div><strong>Verify</strong><p>Inspect The Original Passages.</p></div></div>
             </div>
           </section>
 
           <section className="auth-signin-zone" aria-labelledby="auth-title">
-            <div className="auth-signin-topline"><span>YOUR PRIVATE WORKSPACE</span><span>ACCESS / 01</span></div>
+            <div className="auth-signin-topline"><span>Your Private Workspace</span><span>Access / 01</span></div>
             <div className="auth-card">
               <div className="auth-card-icon" aria-hidden="true">M<span>/</span></div>
-              <p className="eyebrow">WELCOME BACK</p>
+              <p className="eyebrow">Welcome Back</p>
               <h2 id="auth-title">Make Yourself<br /><em>At Home.</em></h2>
               <p className="auth-card-description">
                 Sign In To Continue Your Research, Documents And Conversations.
@@ -954,16 +954,16 @@ export default function Home() {
               </form>
               <div className="auth-card-foot">
                 <span className="auth-privacy-mark" aria-hidden="true">●</span>
-                Self-hosted. Your Files Stay In Your Environment.
+                Self-Hosted. Your Files Stay In Your Environment.
               </div>
             </div>
-            <p className="auth-signin-note">A PERSONAL SPACE FOR THOUGHTFUL WORK.</p>
+            <p className="auth-signin-note">A Personal Space For Thoughtful Work.</p>
           </section>
         </div>
 
         <footer className="auth-footer">
-          <span>LOCALMIND / THE READING DESK</span>
-          <span>DOCUMENTS IN. CLARITY OUT.</span>
+          <span>LocalMind / The Reading Desk</span>
+          <span>Documents In. Clarity Out.</span>
         </footer>
       </div>
     </main>
