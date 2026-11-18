@@ -193,3 +193,69 @@ def test_absent_named_service_cannot_be_generated_from_general_knowledge():
     result = events[-1][1]
     assert result.sources == []
     assert "not mentioned in the indexed document text" in result.answer
+
+
+def test_selected_document_absent_bedrock_never_calls_model():
+    result = corpus(12)
+
+    class Retrieval:
+        def retrieve_document_by_id(self, document_id, query):
+            assert document_id == "interview-document"
+            return result
+
+    class Model:
+        def stream(self, prompt):
+            raise AssertionError("Absent named service must not reach Ollama")
+
+    events = list(RAGService(Retrieval(), Model()).stream_answer(
+        "What is Amazon Bedrock?", document_id="interview-document"
+    ))
+    assert events[-1][1].sources == []
+    assert "not mentioned in the indexed document text" in events[-1][1].answer
+
+
+def test_selected_document_named_subject_late_chunk_is_retrieved():
+    result = corpus(12)
+    from dataclasses import replace
+    result.chunks[11] = replace(
+        result.chunks[11],
+        text="Amazon Bedrock is a managed service for generative AI.",
+    )
+
+    class Retrieval:
+        def retrieve_document_by_id(self, document_id, query):
+            return result
+
+    class Model:
+        def stream(self, prompt):
+            assert "Amazon Bedrock is a managed service" in prompt
+            assert "Interview topic 0" not in prompt
+            yield "Amazon Bedrock is a managed service [1]."
+
+    answer = list(RAGService(Retrieval(), Model()).stream_answer(
+        "What is Amazon Bedrock?", document_id="interview-document"
+    ))[-1][1]
+    assert [source.chunk_id for source in answer.sources] == [11]
+
+
+def test_selected_document_comparison_uses_both_concept_passages():
+    result = corpus(12)
+    from dataclasses import replace
+    result.chunks[7] = replace(result.chunks[7], text="Amazon EC2 is a virtual server compute service.")
+    result.chunks[9] = replace(result.chunks[9], text="AWS IAM controls identities and permissions.")
+
+    class Retrieval:
+        def retrieve_document_by_id(self, document_id, query):
+            return result
+
+    class Model:
+        def stream(self, prompt):
+            assert "EC2 is a virtual server" in prompt
+            assert "IAM controls identities" in prompt
+            yield "EC2 is compute [1], while IAM controls access [2]."
+
+    response = list(RAGService(Retrieval(), Model()).stream_answer(
+        "Compare EC2 and IAM", document_id="interview-document"
+    ))[-1][1]
+    assert [s.chunk_id for s in response.sources[:2]] == [7, 9]
+    assert "EC2 is compute" in response.answer
