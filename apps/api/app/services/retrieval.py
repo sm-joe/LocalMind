@@ -172,6 +172,63 @@ class RetrievalService:
             total_start=total_start,
         )
 
+    def retrieve_named_entity(
+        self, query: str, entity: str, limit: int = 4
+    ) -> RetrievalResult:
+        """Look for an explicitly named subject in all indexed document text.
+
+        Semantic top-k may miss a rare subject entirely. Literal matches
+        are a stronger first step for 'What is Amazon Bedrock?' and prevent
+        claiming a source is absent based on only three vector hits.
+        """
+        if not entity.strip() or limit <= 0:
+            raise ValueError("Entity and positive limit are required.")
+        start = perf_counter()
+        needle = re.compile(
+            rf"(?<![a-z0-9]){re.escape(entity.strip())}(?![a-z0-9])",
+            re.IGNORECASE,
+        )
+        matches: list[RetrievedChunk] = []
+        scanned = 0
+        seen: set[tuple[str, int]] = set()
+        for point in self.vector_store.iter_points():
+            if scanned >= 10000:
+                break
+            scanned += 1
+            chunk = self._build_chunk(point.payload or {}, 0.0)
+            if chunk is None or (chunk.document_id, chunk.chunk_id) in seen:
+                continue
+            seen.add((chunk.document_id, chunk.chunk_id))
+            if needle.search(chunk.text):
+                matches.append(chunk)
+        # Prefer definitional sentences over incidental mentions. If the
+        # term appears late in a chunk, RAG retains that nearby text.
+        def rank(chunk: RetrievedChunk) -> tuple[int, int]:
+            match = needle.search(chunk.text)
+            text_after = chunk.text[match.start():match.end() + 120] if match else ""
+            definition = bool(re.search(
+                r"\\b(?:is|provides|offers|enables|allows|service|platform)\\b",
+                text_after, re.IGNORECASE
+            ))
+            return (int(definition), -chunk.chunk_id)
+        matches.sort(key=rank, reverse=True)
+        matches = matches[:limit]
+        elapsed = round((perf_counter() - start) * 1000, 2)
+        return RetrievalResult(
+            chunks=matches,
+            diagnostics=RetrievalDiagnostics(
+                requested_limit=limit, candidate_count=scanned,
+                returned_count=len(matches),
+                filtered_count=max(0, scanned-len(matches)),
+                top_candidate_score=None, bottom_candidate_score=None,
+                top_score=None, bottom_score=None,
+                has_context=bool(matches),
+            ),
+            performance=RetrievalPerformance(
+                embedding_ms=0.0, search_ms=elapsed, total_ms=elapsed
+            ),
+        )
+
     def retrieve_comparison(
         self, query: str, left: str, right: str, limit: int = 4
     ) -> RetrievalResult:
