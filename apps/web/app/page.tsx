@@ -691,12 +691,12 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     <main className="app-shell">
       <section className="workspace">
         <header className="app-header product-header">
-          <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">◆</span><span>localrag <span className="brand-mark-subtle">/ workspace</span></span></div>
-          <div className="header-actions"><span className="status-pill"><span className="status-dot" />Private · Local</span><button type="button" onClick={onLogout} className="header-signout">Sign out ↗</button></div>
+          <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">L<span className="brand-mark-detail">/</span></span><span>localrag<span className="brand-mark-subtle"> / the reading desk</span></span></div>
+          <div className="header-actions"><span className="status-pill"><span className="status-dot" />On your device</span><button type="button" onClick={onLogout} className="header-signout">Sign out ↗</button></div>
         </header>
         <div className="workspace-intro">
-          <div><p className="eyebrow">YOUR KNOWLEDGE, CONNECTED</p><h1>Good questions start here<span className="heading-dot">.</span></h1><p className="subtitle">Explore documents, find trustworthy answers, and trace every insight to its source.</p></div>
-          <div className="workspace-metrics" aria-label="Workspace overview"><div><strong>{documents.length}</strong><span>Documents</span></div><div><strong>{conversations.filter((item) => !item.is_archived).length}</strong><span>Conversations</span></div></div>
+          <div className="intro-copy"><p className="eyebrow"><span className="intro-index">01 /</span> YOUR RESEARCH SPACE</p><h1>Read between<br /><em>the lines.</em></h1><p className="subtitle">A quieter way to work with your documents. Ask what matters, then follow the evidence.</p></div>
+          <div className="workspace-metrics" aria-label="Workspace overview"><div><strong>{String(documents.length).padStart(2, "0")}</strong><span>Files in library</span></div><div><strong>{String(conversations.filter((item) => !item.is_archived).length).padStart(2, "0")}</strong><span>Research threads</span></div></div>
         </div>
 
         <div className="workspace-grid">
@@ -704,8 +704,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             <section className="conversations-section">
               <div className="conversation-panel-header">
                 <div>
-                  <h2>Conversations</h2>
-                  <p>{visibleConversations.length} {visibleConversations.length === 1 ? "chat" : "chats"}</p>
+                  <h2>Research threads</h2>
+                  <p>Pick up where you left off</p>
                 </div>
                 <button
                   type="button"
@@ -713,11 +713,11 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                   onClick={() => void createConversation()}
                   disabled={conversationControlsDisabled}
                 >
-                  + New chat
+                  + New thread
                 </button>
               </div>
 
-              <label className="library-search-wrap"><span aria-hidden="true">⌕</span><input className="library-search" type="search" placeholder="Find a conversation" aria-label="Find a conversation" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} /></label>
+              <label className="library-search-wrap"><span aria-hidden="true">⌕</span><input className="library-search" type="search" placeholder="Search threads" aria-label="Search threads" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} /></label>
               <div className="conversation-toolbar">
                 <span className="conversation-section-label">{showArchived ? "Archived chats" : "Recent chats"}</span>
                 <button
@@ -807,11 +807,11 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
             <aside className="documents-panel">
               <div className="panel-header">
                 <div>
-                  <h2>Documents</h2>
+                  <h2>Your library</h2>
                   <p>{documents.length} {documents.length === 1 ? "document" : "documents"}</p>
                 </div>
                 <button type="button" className="upload-button" onClick={openFilePicker} disabled={uploading}>
-                  {uploading ? "Indexing…" : "+ Upload"}
+                  {uploading ? "Indexing…" : "+ Add file"}
                 </button>
                 <input ref={fileInputRef} type="file" className="hidden-file-input" accept=".pdf,.docx,.txt,.md" onChange={handleFileChange} />
               </div>
@@ -830,7 +830,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                   </div>
                 ) : visibleDocuments.length === 0 ? (<div className="documents-empty"><strong>No matching documents</strong><span>Try another filename.</span></div>) : visibleDocuments.map((document) => (
                   <article className="document-card" key={document.document_id}>
-                    <div className="document-icon">DOC</div>
+                    <div className="document-icon">{document.filename.split(".").pop()?.toUpperCase().slice(0, 4) ?? "FILE"}</div>
                     <div className="document-info">
                       <span className="document-name">{document.filename}</span>
                       <span className="document-meta">{document.chunks} {document.chunks === 1 ? "chunk" : "chunks"}</span>
@@ -853,7 +853,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           <section className="chat-panel">
             <div className="chat-panel-heading">
               <div>
-                <span className="chat-context-label">CURRENT CONVERSATION</span>
+                <span className="chat-context-label">THE READING DESK <span className="context-separator">/</span> CURRENT THREAD</span>
                 <h2>{activeConversation?.title ?? "New conversation"}</h2>
               </div>
               {activeConversation && <span className="chat-message-count">{messages.length} {messages.length === 1 ? "message" : "messages"}</span>}
@@ -863,12 +863,14 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
               <div className="conversation-loading-state" role="status">Restoring conversation history…</div>
             ) : messages.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">✦</div>
-                <h2>Turn documents into answers.</h2>
-                <p>{documents.length === 0 ? "Upload a document to begin. Your answers will link back to the source passages." : "Ask a question, compare ideas, or explore the evidence in your document library."}</p>
+                <div className="empty-overline">THE WORKSPACE / 001</div>
+                <div className="empty-icon" aria-hidden="true"><span>“</span></div>
+                <h2>Find the thread<br /><em>worth pulling.</em></h2>
+                <p>{documents.length === 0 ? "Add your first document to start reading, questioning and tracing its ideas." : "Your library is ready. Start with a thought, a comparison, or a question worth exploring."}</p>
                 <div className="suggestions">
-                  <button type="button" onClick={() => setQuestion("Summarize the key ideas in my documents.")}>✦ Summarize my documents</button>
-                  <button type="button" onClick={() => setQuestion("What are the most important findings?")}>⌕ Find key findings</button>
+                  <button type="button" onClick={() => setQuestion("Summarize the key ideas in my documents.")}><span className="suggestion-number">01</span><span>Summarize the collection</span><span aria-hidden="true">↗</span></button>
+                  <button type="button" onClick={() => setQuestion("What are the most important findings?")}><span className="suggestion-number">02</span><span>Surface the key findings</span><span aria-hidden="true">↗</span></button>
+                  <button type="button" onClick={() => setQuestion("What topics are covered in my documents?")}><span className="suggestion-number">03</span><span>Explore the topics</span><span aria-hidden="true">↗</span></button>
                 </div>
               </div>
             ) : (
@@ -878,7 +880,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                     key={message.id}
                     className={`message ${message.role === "user" ? "message-user" : "message-assistant"}`}
                   >
-                    <div className="message-label">{message.role === "user" ? "You" : "LocalRAG"}</div>
+                    <div className="message-label">{message.role === "user" ? "YOUR NOTE" : "FROM THE LIBRARY"}</div>
                     <div className="message-content">
                       {message.status === "failed" && !message.content
                         ? "This response failed to generate. You can ask another question to continue this conversation."
@@ -920,7 +922,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                 ))}
                 {isLoading && (
                   <article className="message message-assistant">
-                    <div className="message-label">LocalRAG</div>
+                    <div className="message-label">READING YOUR SOURCES</div>
                     <div className="typing-indicator" role="status" aria-label="LocalRAG is generating a response"><span /><span /><span /></div>
                   </article>
                 )}
@@ -932,9 +934,10 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
 
             <form className="composer" onSubmit={sendMessage}>
               <textarea
+                aria-label="Ask a question about your documents"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
-                placeholder="Ask your documents…"
+                placeholder="Ask something about your library..."
                 rows={1}
                 disabled={isLoading || messagesLoading}
                 onKeyDown={(event) => {
@@ -945,7 +948,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                 }}
               />
               <button type="submit" className="send-button" disabled={!question.trim() || isLoading || messagesLoading}>
-                {isLoading ? "…" : "Send ↗"}
+                {isLoading ? "Working…" : "Ask ↗"}
               </button>
             </form>
             <p className="composer-hint">{documents.length === 0 ? "Upload a document to ground your answers in evidence." : "Enter to send · Shift + Enter for a new line · Answers link to sources."}</p>
@@ -955,8 +958,8 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           <aside className={`evidence-panel${evidencePanelCollapsed ? " evidence-panel-collapsed" : ""}`} aria-label="Retrieved evidence">
             <div className="evidence-panel-header">
               <div>
-                <span className="chat-context-label">CURRENT EVIDENCE</span>
-                <h2>Retrieved sources</h2>
+                <span className="chat-context-label">SOURCE INSPECTOR</span>
+                <h2>Evidence, in context</h2>
                 <p>{evidenceSources.length} {evidenceSources.length === 1 ? "source" : "sources"} from the latest answer</p>
               </div>
               <button
@@ -983,9 +986,9 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                 )}
                 {evidenceSources.length === 0 ? (
                   <div className="evidence-empty">
-                    <span className="evidence-empty-mark">↗</span>
-                    <strong>No retrieved sources yet</strong>
-                    <p>Sources returned with an answer will appear here.</p>
+                    <span className="evidence-empty-mark">“</span>
+                    <strong>Sources belong here.</strong>
+                    <p>Referenced passages appear alongside each answer, so you can check what it says.</p>
                   </div>
                 ) : evidenceSources.map((source, index) => (
                   <article className="evidence-card" key={`${source.document_id}-${source.chunk_id}-${index}`}>
