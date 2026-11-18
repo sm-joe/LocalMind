@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       APP_ENV: production
-      LOCALRAG_API_KEY: ${LOCALRAG_API_KEY:?Set LOCALRAG_API_KEY (32+ random characters) in .env}
+      LOCALRAG_API_KEY: ${LOCALMIND_API_KEY:-${LOCALRAG_API_KEY:?Set LOCALMIND_API_KEY (32+ random characters) in .env}}
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       OLLAMA_BASE_URL: http://ollama:11434
@@ -47,9 +47,9 @@ services:
       context: ./apps/web
     environment:
       LOCALRAG_API_INTERNAL_URL: http://api:8000
-      LOCALRAG_API_KEY: ${LOCALRAG_API_KEY:?Set LOCALRAG_API_KEY in .env}
-      LOCALRAG_ADMIN_PASSWORD: ${LOCALRAG_ADMIN_PASSWORD:?Set LOCALRAG_ADMIN_PASSWORD in .env}
-      LOCALRAG_SESSION_SECRET: ${LOCALRAG_SESSION_SECRET:?Set LOCALRAG_SESSION_SECRET (32+ random characters) in .env}
+      LOCALRAG_API_KEY: ${LOCALMIND_API_KEY:-${LOCALRAG_API_KEY:?Set LOCALMIND_API_KEY in .env}}
+      LOCALRAG_ADMIN_PASSWORD: ${LOCALMIND_ADMIN_PASSWORD:-${LOCALRAG_ADMIN_PASSWORD:?Set LOCALMIND_ADMIN_PASSWORD in .env}}
+      LOCALRAG_SESSION_SECRET: ${LOCALMIND_SESSION_SECRET:-${LOCALRAG_SESSION_SECRET:?Set LOCALMIND_SESSION_SECRET (32+ random characters) in .env}}
     container_name: localrag-web
     restart: unless-stopped
     ports:
