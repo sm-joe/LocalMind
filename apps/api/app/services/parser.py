@@ -50,7 +50,9 @@ def parse_document(
             f"Unsupported file type: {extension}"
         )
 
-    normalized_text = _normalize_text(text)
+    normalized_text = _normalize_text(
+        text, preserve_paragraphs=(extension == ".docx")
+    )
 
     if not normalized_text:
         raise ValueError(
@@ -162,16 +164,27 @@ def _parse_text(path: Path) -> str:
         ) from exc
 
 
-def _normalize_text(text: str) -> str:
+def _normalize_text(
+    text: str, preserve_paragraphs: bool = False
+) -> str:
     lines = [
         line.strip()
         for line in text.splitlines()
     ]
+    if not preserve_paragraphs:
+        return "\n".join(line for line in lines if line).strip()
 
-    normalized_text = "\n".join(
-        line
-        for line in lines
-        if line
-    ).strip()
-
-    return normalized_text
+    # The chunker recognizes paragraph boundaries only when they are
+    # separated by a blank line. Do not flatten DOCX questions and answers
+    # into one giant paragraph before splitting them into retrieval chunks.
+    normalized: list[str] = []
+    blank = False
+    for line in lines:
+        if not line:
+            blank = bool(normalized)
+        else:
+            if blank:
+                normalized.append("")
+                blank = False
+            normalized.append(line)
+    return "\n".join(normalized).strip()
