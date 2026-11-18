@@ -30,6 +30,10 @@ class IndexClaim:
     status: str
     filename: str
     previous_document_id: str | None = None
+    previous_chunks: int = 0
+    previous_filename: str | None = None
+    previous_content_type: str | None = None
+    restore_on_failure: bool = False
 
 
 class DocumentIndexRegistry:
@@ -37,8 +41,7 @@ class DocumentIndexRegistry:
         self.session_factory = session_factory or get_session_factory()
 
     def acquire(
-        self, document_hash: str, filename: str, content_type: str
-    ) -> IndexClaim:
+        self, document_hash: str, filename: str, content_type: str,\n        force: bool = False,\n    ) -> IndexClaim:
         now = datetime.now(timezone.utc)
         proposed_id = str(uuid.uuid4())
         with self.session_factory() as db:
@@ -61,7 +64,7 @@ class DocumentIndexRegistry:
                 )
                 if record is None:
                     raise RuntimeError("Could not claim document index entry.")
-                if record.status == "ready":
+                if record.status == "ready" and not force:
                     return IndexClaim(
                         document_hash, record.document_id, "ready",
                         record.filename,
@@ -75,6 +78,10 @@ class DocumentIndexRegistry:
                             "The same document is being indexed. Retry later."
                         )
                 prior_id = record.document_id if record.document_id != proposed_id else None
+                restore_previous = force and record.status == "ready"
+                prior_chunks = record.chunks if restore_previous else 0
+                prior_filename = record.filename if restore_previous else None
+                prior_content_type = record.content_type if restore_previous else None
                 record.document_id = proposed_id
                 record.status = "indexing"
                 record.filename = filename
@@ -84,6 +91,10 @@ class DocumentIndexRegistry:
                 return IndexClaim(
                     document_hash, proposed_id, "claimed",
                     filename, previous_document_id=prior_id,
+                    previous_chunks=prior_chunks,
+                    previous_filename=prior_filename,
+                    previous_content_type=prior_content_type,
+                    restore_on_failure=restore_previous,
                 )
 
     def complete(
@@ -113,7 +124,18 @@ class DocumentIndexRegistry:
                     ).with_for_update()
                 )
                 if record and record.document_id == claim.document_id:
-                    record.status = "failed"
+                    if claim.restore_on_failure and claim.previous_document_id:
+                        # Forced reindex failed: restore the prior registry
+                        # record. Its Qdrant chunks have never been deleted.
+                        record.document_id = claim.previous_document_id
+                        record.status = "ready"
+                        record.chunks = claim.previous_chunks
+                        record.filename = claim.previous_filename or record.filename
+                        record.content_type = (
+                            claim.previous_content_type or record.content_type
+                        )
+                    else:
+                        record.status = "failed"
                     record.updated_at = datetime.now(timezone.utc)
 
     def get_status(self, document_id: str) -> DocumentIndex | None:
