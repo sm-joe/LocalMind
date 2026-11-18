@@ -336,7 +336,7 @@ async def upload_document(
             content_type=file.content_type
             or "application/octet-stream",
             original_filename=original_filename,
-            **({"force_reindex": True} if reindex else {}),
+            **({"force_reindex": True} if reindex is True else {}),
         )
 
         status = (
