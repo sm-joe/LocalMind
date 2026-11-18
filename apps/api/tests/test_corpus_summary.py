@@ -77,4 +77,40 @@ def test_summary_without_model_citations_returns_real_cited_excerpts():
     assert "Qdrant stores vector embeddings." in response.answer
     assert "[1]" in response.answer
     assert response.sources[0].document_id == "one"
-    assert llm.generate.call_count == 2
+    assert llm.generate.call_count == 1
+
+
+def test_twelve_chunk_docx_summary_uses_one_small_prompt():
+    chunks = [
+        RetrievedChunk(
+            document_id="interviews",
+            filename="Interview_Questions.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            chunk_id=index,
+            text=f"Question {index}: Describe the engineering decision. " + ("Example and tradeoffs. " * 65),
+            start_char=index * 1100,
+            end_char=(index + 1) * 1100,
+            score=0.8,
+        )
+        for index in range(12)
+    ]
+    retrieval = MagicMock()
+    retrieval.retrieve_document.return_value = RetrievalResult(
+        chunks=chunks,
+        diagnostics=RetrievalDiagnostics(
+            requested_limit=12, candidate_count=12, returned_count=12,
+            filtered_count=0, top_candidate_score=0.8, bottom_candidate_score=0.8,
+            top_score=0.8, bottom_score=0.8, has_context=True,
+        ),
+        performance=RetrievalPerformance(embedding_ms=0, search_ms=1, total_ms=1),
+    )
+    llm = MagicMock()
+    llm.generate.return_value = "The document covers engineering interview decisions [1]."
+    result = RAGService(retrieval, llm).answer("Summarize the document.")
+    assert llm.generate.call_count == 1
+    assert len(result.sources) == 12
+    assert result.sources[-1].chunk_id == 11
+    assert result.answer.endswith("[1].")
+    prompt = llm.generate.call_args.args[0]
+    assert len(prompt) < 11000
+    assert 'source="12"' in prompt
