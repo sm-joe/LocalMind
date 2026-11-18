@@ -34,13 +34,19 @@ def test_real_upload_answer_and_citation(monkeypatch):
     monkeypatch.setattr(chat_route, "get_settings", lambda: test_settings)
 
     qdrant = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
-    filename = f"localrag-acceptance-{uuid.uuid4().hex}.txt"
+    # PostgreSQL deduplicates by content hash across *all* Qdrant
+    # collections. A unique filename/collection alone is not sufficient:
+    # give every test run unique bytes so it cannot return already_indexed.
+    run_id = uuid.uuid4().hex
+    filename = f"localrag-acceptance-{run_id}.txt"
     content = (
         "LocalRAG acceptance project: Planet Cedar uses SaturnDB as its "
         "primary document metadata database. The service processes rainfall "
         "measurements every evening and archives reports on Fridays. "
-        "SaturnDB stores the Cedar project metadata, not the model weights."
+        "SaturnDB stores the Cedar project metadata, not the model weights. "
+        f"Unique acceptance run identifier: {run_id}."
     )
+    document_id = None
     try:
         with TestClient(app) as client:
             if settings.localrag_api_key:
@@ -97,4 +103,11 @@ def test_real_upload_answer_and_citation(monkeypatch):
             ):
                 qdrant.delete_collection(collection_name=isolated_collection)
         finally:
-            qdrant.close()
+            try:
+                # Remove only the fixture's PostgreSQL registry row, never
+                # any user document. Collection deletion alone leaves the
+                # global hash registry claiming this file is still indexed.
+                if document_id is not None:
+                    documents_route.create_document_registry().forget(document_id)
+            finally:
+                qdrant.close()
