@@ -697,331 +697,131 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <main className="app-shell">
-      <section className="workspace">
-        <header className="app-header product-header">
-          <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">M<span className="brand-mark-detail">/</span></span><span>LocalMind<span className="brand-mark-subtle"> / the reading desk</span></span></div>
-          <div className="header-actions"><span className="status-pill"><span className="status-dot" />On your device</span><button type="button" onClick={onLogout} className="header-signout">Sign out ↗</button></div>
+    <main className="lm-app">
+      <aside className="lm-sidebar" aria-label="Main navigation">
+        <div className="lm-brand"><span className="lm-brand-symbol" aria-hidden="true">m.</span><span>localmind</span></div>
+        <div className="lm-workspace-select"><span className="lm-workspace-avatar">L</span><div><strong>Personal workspace</strong><small>Private knowledge base</small></div></div>
+        <div className="lm-nav-label">WORKSPACE</div>
+        <nav className="lm-navigation">
+          <button type="button" className={activeView === "library" ? "lm-nav-link active" : "lm-nav-link"} aria-current={activeView === "library" ? "page" : undefined} onClick={() => setActiveView("library")}>
+            <span aria-hidden="true">▦</span> Documents <small>{documents.length}</small>
+          </button>
+          <button type="button" className={activeView === "research" ? "lm-nav-link active" : "lm-nav-link"} aria-current={activeView === "research" ? "page" : undefined} onClick={() => setActiveView("research")}>
+            <span aria-hidden="true">⌕</span> Research
+          </button>
+          <button type="button" className={activeView === "history" ? "lm-nav-link active" : "lm-nav-link"} aria-current={activeView === "history" ? "page" : undefined} onClick={() => setActiveView("history")}>
+            <span aria-hidden="true">▤</span> Conversations <small>{conversations.filter((item) => !item.is_archived).length}</small>
+          </button>
+        </nav>
+        <div className="lm-nav-label lm-quick-heading">QUICK ACTIONS</div>
+        <button type="button" className="lm-sidebar-action" onClick={openFilePicker} disabled={uploading}>+ Add documents</button>
+        <button type="button" className="lm-sidebar-action muted" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New research thread</button>
+        <div className="lm-sidebar-bottom"><span className="lm-local-indicator" /> Local workspace <small>Your files stay in your environment</small></div>
+      </aside>
+
+      <section className="lm-main">
+        <header className="lm-topbar">
+          <div className="lm-breadcrumb">Workspace <span>/</span> <strong>{activeView === "library" ? "Documents" : activeView === "research" ? "Research" : "Conversations"}</strong></div>
+          <div className="lm-header-right"><span className="lm-topbar-privacy">● Private &amp; local</span><button type="button" className="lm-signout" onClick={onLogout}>Sign out</button></div>
         </header>
-        <div className="workspace-intro">
-          <div className="intro-copy"><p className="eyebrow"><span className="intro-index">01 /</span> YOUR RESEARCH SPACE</p><h1>Read between<br /><em>the lines.</em></h1><p className="subtitle">A quieter way to work with your documents. Ask what matters, then follow the evidence.</p></div>
-          <div className="workspace-metrics" aria-label="Workspace overview"><div><strong>{String(documents.length).padStart(2, "0")}</strong><span>Files in library</span></div><div><strong>{String(conversations.filter((item) => !item.is_archived).length).padStart(2, "0")}</strong><span>Research threads</span></div></div>
-        </div>
-
-        <div className="workspace-grid">
-          <aside className="sidebar-panel">
-            <section className="conversations-section">
-              <div className="conversation-panel-header">
-                <div>
-                  <h2>Research threads</h2>
-                  <p>Pick up where you left off</p>
+        <div className="lm-content">
+          {activeView === "library" && (
+            <section className="lm-view lm-library" aria-label="Document library">
+              <div className="lm-page-header">
+                <div><p className="lm-overline">YOUR WORKSPACE / FILE MANAGEMENT</p><h1>Documents</h1><p>Keep your knowledge organized, searchable, and ready to explore.</p></div>
+                <button className="lm-primary-button" type="button" onClick={openFilePicker} disabled={uploading}>{uploading ? "Indexing..." : "+ Upload documents"}</button>
+              </div>
+              <div className="lm-stats">
+                <div><span>Files in your library</span><strong>{documents.length}</strong><small>Supported documents</small></div>
+                <div><span>Searchable passages</span><strong>{indexedChunks}</strong><small>Indexed chunks</small></div>
+                <div><span>Research conversations</span><strong>{conversations.filter((item) => !item.is_archived).length}</strong><small>Saved threads</small></div>
+              </div>
+              <div className={"lm-upload-zone" + (dragActive ? " is-dragging" : "")} onDragOver={(event) => { event.preventDefault(); if (!uploading) setDragActive(true); }} onDragLeave={(event) => { event.preventDefault(); setDragActive(false); }} onDrop={(event) => { event.preventDefault(); setDragActive(false); if (!uploading && event.dataTransfer.files[0]) void uploadDocument(event.dataTransfer.files[0]); }}>
+                <div className="lm-upload-icon" aria-hidden="true">↑</div>
+                <div><strong>{dragActive ? "Release to add your document" : "Drag and drop files here"}</strong><p>PDF, Word, Markdown or text · Up to 10 MB per file</p></div>
+                <button type="button" onClick={openFilePicker} disabled={uploading} className="lm-outline-button">{uploading ? "Indexing..." : "Browse files"}</button>
+              </div>
+              {documentError && <div className="lm-error" role="alert">{documentError}</div>}
+              {uploadNotice && <div className="lm-notice" role="status">{uploadNotice}<button type="button" aria-label="Dismiss upload notice" onClick={() => setUploadNotice(null)}>×</button></div>}
+              <div className="lm-files-panel">
+                <div className="lm-section-header"><div><h2>Your files</h2><p>{visibleDocuments.length} of {documents.length} documents</p></div><label className="lm-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search file names" aria-label="Search file names" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} /></label></div>
+                <div className="lm-filters" aria-label="Filter file type">
+                  {["all", "pdf", "docx", "txt", "md"].map((type) => <button type="button" key={type} aria-pressed={fileTypeFilter === type} className={fileTypeFilter === type ? "active" : ""} onClick={() => setFileTypeFilter(type)}>{type === "all" ? "All files" : type.toUpperCase()}</button>)}
                 </div>
-                <button
-                  type="button"
-                  className="new-conversation-button"
-                  onClick={() => void createConversation()}
-                  disabled={conversationControlsDisabled}
-                >
-                  + New thread
-                </button>
-              </div>
-
-              <label className="library-search-wrap"><span aria-hidden="true">⌕</span><input className="library-search" type="search" placeholder="Search threads" aria-label="Search threads" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} /></label>
-              <div className="conversation-toolbar">
-                <span className="conversation-section-label">{showArchived ? "Archived chats" : "Recent chats"}</span>
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => {
-                    setShowArchived((current) => !current);
-                  }}
-                  disabled={conversationsLoading || conversationControlsDisabled}
-                >
-                  {showArchived ? "Show active" : "Archived"}
-                </button>
-              </div>
-
-              {conversationError && <div className="conversation-error" role="alert">{conversationError}</div>}
-
-              <div className="conversation-list" aria-label="Conversation history">
-                {conversationsLoading ? (
-                  <div className="conversation-empty">Loading conversations…</div>
-                ) : visibleConversations.length === 0 ? (
-                  <div className="conversation-empty">
-                    <strong>{conversationSearch ? "No matching conversations" : showArchived ? "No archived chats" : "No conversations yet"}</strong>
-                    <span>{conversationSearch ? "Try a different search term." : showArchived ? "Archived chats will appear here." : "Start a new chat to keep your questions and answers."}</span>
-                  </div>
-                ) : visibleConversations.map((conversation) => (
-                  <article
-                    key={conversation.id}
-                    className={`conversation-item${activeConversationId === conversation.id ? " conversation-item-active" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className="conversation-select"
-                      onClick={() => void openConversation(conversation.id)}
-                      disabled={conversationControlsDisabled}
-                      aria-current={activeConversationId === conversation.id ? "page" : undefined}
-                    >
-                      <span className="conversation-title">{conversation.title}</span>
-                      <span className="conversation-meta">
-                        {conversation.message_count} {conversation.message_count === 1 ? "message" : "messages"}
-                        <span aria-hidden="true"> · </span>
-                        {new Date(conversation.updated_at).toLocaleDateString()}
-                      </span>
-                    </button>
-                    <div className="conversation-actions">
-                      {!conversation.is_archived && (
-                        <button
-                          type="button"
-                          className="conversation-action"
-                          title="Rename conversation"
-                          aria-label={`Rename ${conversation.title}`}
-                          disabled={conversationControlsDisabled || conversationActionId === conversation.id}
-                          onClick={() => void renameConversation(conversation)}
-                        >Edit</button>
-                      )}
-                      <button
-                        type="button"
-                        className="conversation-action"
-                        title={conversation.is_archived ? "Restore conversation" : "Archive conversation"}
-                        aria-label={`${conversation.is_archived ? "Restore" : "Archive"} ${conversation.title}`}
-                        disabled={conversationControlsDisabled || conversationActionId === conversation.id}
-                        onClick={() => void toggleArchive(conversation)}
-                      >{conversation.is_archived ? "Restore" : "Archive"}</button>
-                      <button
-                        type="button"
-                        className="conversation-action conversation-action-danger"
-                        title="Delete conversation"
-                        aria-label={`Delete ${conversation.title}`}
-                        disabled={conversationControlsDisabled || conversationActionId === conversation.id}
-                        onClick={() => void deleteConversation(conversation)}
-                      >Delete</button>
-                    </div>
-                  </article>
-                ))}
-                {!conversationsLoading && conversationNextCursor && (
-                  <button
-                    type="button"
-                    className="load-more-conversations"
-                    onClick={() => void loadMoreConversations()}
-                    disabled={loadingMoreConversations || conversationControlsDisabled}
-                  >
-                    {loadingMoreConversations ? "Loading…" : "Load older conversations"}
-                  </button>
-                )}
+                <div className="lm-file-table" role="table" aria-label="Indexed documents">
+                  <div className="lm-file-row lm-file-thead" role="row"><span role="columnheader">NAME</span><span role="columnheader">TYPE</span><span role="columnheader">INDEXED CONTENT</span><span role="columnheader">ACTIONS</span></div>
+                  {documentsLoading ? <div className="lm-table-empty" role="status">Loading your library...</div> :
+                   visibleDocuments.length === 0 ? <div className="lm-table-empty"><strong>{documents.length === 0 ? "Your library is empty" : "No matching files"}</strong><p>{documents.length === 0 ? "Add a document above to start exploring." : "Try a different search or file type."}</p></div> :
+                   visibleDocuments.map((document) => (
+                     <div className="lm-file-row" role="row" key={document.document_id}>
+                       <div className="lm-file-name" role="cell"><span className="lm-file-icon">{document.filename.split(".").pop()?.toUpperCase().slice(0, 4) || "FILE"}</span><div><strong title={document.filename}>{document.filename}</strong><small>Ready for questions</small></div></div>
+                       <span className="lm-type" role="cell">{document.filename.split(".").pop()?.toUpperCase() || "FILE"}</span>
+                       <span className="lm-chunks" role="cell">{document.chunks} passages</span>
+                       <div className="lm-file-actions" role="cell">
+                         <button type="button" onClick={() => { setSelectedDocumentId(document.document_id); setActiveView("research"); setQuestion(""); }} aria-label={"Ask about " + document.filename}>Ask questions ↗</button>
+                         <button type="button" className="lm-delete" onClick={() => void deleteDocument(document.document_id)} disabled={deletingDocumentId === document.document_id} aria-label={"Delete " + document.filename}>{deletingDocumentId === document.document_id ? "..." : "Delete"}</button>
+                       </div>
+                     </div>
+                   ))}
+                </div>
               </div>
             </section>
+          )}
 
-            <aside className="documents-panel">
-              <div className="panel-header">
-                <div>
-                  <h2>Your library</h2>
-                  <p>{documents.length} {documents.length === 1 ? "document" : "documents"}</p>
-                </div>
-                <button type="button" className="upload-button" onClick={openFilePicker} disabled={uploading}>
-                  {uploading ? "Indexing…" : "+ Add file"}
-                </button>
-                <input ref={fileInputRef} type="file" className="hidden-file-input" accept=".pdf,.docx,.txt,.md" onChange={handleFileChange} />
-              </div>
-              {documentError && <div className="document-error" role="alert">{documentError}</div>}
-              {uploadNotice && <div className="upload-notice" role="status">{uploadNotice}<button type="button" onClick={() => setUploadNotice(null)} aria-label="Dismiss upload notice">×</button></div>}
-              {documents.length > 0 && <label className="library-search-wrap"><span aria-hidden="true">⌕</span><input className="library-search" type="search" aria-label="Find a document" placeholder="Find a document" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} /></label>}
-              <div className={`document-dropzone${dragActive ? " is-dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); if (!uploading) setDragActive(true); }} onDragLeave={(event) => { event.preventDefault(); setDragActive(false); }} onDrop={(event) => { event.preventDefault(); setDragActive(false); if (!uploading && event.dataTransfer.files[0]) void uploadDocument(event.dataTransfer.files[0]); }}>
-              <div className="document-list">
-                {documentsLoading ? (
-                  <div className="documents-empty">Loading documents…</div>
-                ) : documents.length === 0 ? (
-                  <div className="documents-empty">
-                    <div className="documents-empty-icon">+</div>
-                    <strong>No documents yet</strong>
-                    <span>Upload a document to start asking questions.</span>
-                  </div>
-                ) : visibleDocuments.length === 0 ? (<div className="documents-empty"><strong>No matching documents</strong><span>Try another filename.</span></div>) : visibleDocuments.map((document) => (
-                  <article className="document-card" key={document.document_id}>
-                    <div className="document-icon">{document.filename.split(".").pop()?.toUpperCase().slice(0, 4) ?? "FILE"}</div>
-                    <div className="document-info">
-                      <span className="document-name">{document.filename}</span>
-                      <span className="document-meta">{document.chunks} {document.chunks === 1 ? "chunk" : "chunks"}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="delete-button"
-                      aria-label={`Delete ${document.filename}`}
-                      title={`Delete ${document.filename}`}
-                      disabled={deletingDocumentId === document.document_id}
-                      onClick={() => void deleteDocument(document.document_id)}
-                    >{deletingDocumentId === document.document_id ? "…" : "×"}</button>
-                  </article>
-                ))}
-              </div>
-              <div className="upload-hint">{dragActive ? "Release to upload" : uploading ? "Indexing — keep this page open" : "Drop files here or choose Upload · PDF, DOCX, TXT, MD · 10 MB max"}</div></div>
-            </aside>
-          </aside>
-
-          <section className="chat-panel">
-            <div className="chat-panel-heading">
-              <div>
-                <span className="chat-context-label">THE READING DESK <span className="context-separator">/</span> CURRENT THREAD</span>
-                <h2>{activeConversation?.title ?? "New conversation"}</h2>
-              </div>
-              {activeConversation && <span className="chat-message-count">{messages.length} {messages.length === 1 ? "message" : "messages"}</span>}
-            </div>
-
-            {messagesLoading ? (
-              <div className="conversation-loading-state" role="status">Restoring conversation history…</div>
-            ) : messages.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-overline">THE WORKSPACE / 001</div>
-                <div className="empty-icon" aria-hidden="true"><span>“</span></div>
-                <h2>Find the thread<br /><em>worth pulling.</em></h2>
-                <p>{documents.length === 0 ? "Add your first document to start reading, questioning and tracing its ideas." : "Your library is ready. Start with a thought, a comparison, or a question worth exploring."}</p>
-                <div className="suggestions">
-                  <button type="button" onClick={() => setQuestion("Summarize the key ideas in my documents.")}><span className="suggestion-number">01</span><span>Summarize the collection</span><span aria-hidden="true">↗</span></button>
-                  <button type="button" onClick={() => setQuestion("What are the most important findings?")}><span className="suggestion-number">02</span><span>Surface the key findings</span><span aria-hidden="true">↗</span></button>
-                  <button type="button" onClick={() => setQuestion("What topics are covered in my documents?")}><span className="suggestion-number">03</span><span>Explore the topics</span><span aria-hidden="true">↗</span></button>
-                </div>
-              </div>
-            ) : (
-              <div className="messages">
-                {messages.map((message) => (
-                  <article
-                    key={message.id}
-                    className={`message ${message.role === "user" ? "message-user" : "message-assistant"}`}
-                  >
-                    <div className="message-label">{message.role === "user" ? "YOUR NOTE" : "FROM THE LIBRARY"}</div>
-                    <div className="message-content">
-                      {message.status === "failed" && !message.content
-                        ? "This response failed to generate. You can ask another question to continue this conversation."
-                        : message.content}
-                    </div>
-                    {message.role === "assistant" && message.status === "complete" && <div className="answer-actions"><button type="button" onClick={() => void copyText(message.content)}>⧉ Copy answer</button></div>}
-                    {message.role === "assistant" && message.status === "pending" && (
-                      <div className="message-status" role="status">Response pending…</div>
-                    )}
-                    {message.role === "assistant" && message.status === "failed" && (
-                      <div className="message-status message-status-error" role="note">Generation failed</div>
-                    )}
-                    {message.role === "assistant" && message.sources && message.sources.length > 0 && (
-                      <div className="sources">
-                        <div className="sources-title">Sources</div>
-                        <div className="source-list">
-                          {message.sources.map((source, index) => (
-                            <div className="source-card" key={`${source.document_id}-${source.chunk_id}-${index}`}>
-                              <div className="source-icon">DOC</div>
-                              <div className="source-info">
-                                <span className="source-name">{source.filename}</span>
-                                <span className="source-meta">{source.citation} · Chunk {source.chunk_id} · Score {source.score.toFixed(2)}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {message.role === "assistant" && message.status === "complete" && !error && message.content.trim() !== "" && (!message.sources || message.sources.length === 0) && (
-                      <div className="source-status" role="note">
-                        <span className="source-status-icon" aria-hidden="true">i</span>
-                        <div>
-                          <strong>No indexed evidence available</strong>
-                          <p>LocalMind could not retrieve passages for this question. Confirm the file was indexed successfully, then try again. Answers without evidence are not verified.</p>
-                        </div>
-                      </div>
-                    )}
-                  </article>
-                ))}
-                {isLoading && (
-                  <article className="message message-assistant">
-                    <div className="message-label">READING YOUR SOURCES</div>
-                    <div className="typing-indicator" role="status" aria-label="LocalMind is generating a response"><span /><span /><span /></div>
-                  </article>
-                )}
-                <div ref={messagesEndRef} aria-hidden="true" />
-              </div>
-            )}
-
-            {error && <div className="error-banner" role="alert"><strong>Request failed.</strong><span>{error}</span></div>}
-
-            <form className="composer" onSubmit={sendMessage}>
-              <textarea
-                aria-label="Ask a question about your documents"
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder="Ask something about your library..."
-                rows={1}
-                disabled={isLoading || messagesLoading}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    if (question.trim() && !isLoading && !messagesLoading) event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-              />
-              <button type="submit" className="send-button" disabled={!question.trim() || isLoading || messagesLoading}>
-                {isLoading ? "Working…" : "Ask ↗"}
-              </button>
-            </form>
-            <p className="composer-hint">{documents.length === 0 ? "Upload a document to ground your answers in evidence." : "Enter to send · Shift + Enter for a new line · Answers link to sources."}</p>
-            {copyNotice && <div className="copy-notice" role="status">{copyNotice}<button type="button" onClick={() => setCopyNotice(null)}>×</button></div>}
-          </section>
-
-          <aside className={`evidence-panel${evidencePanelCollapsed ? " evidence-panel-collapsed" : ""}`} aria-label="Retrieved evidence">
-            <div className="evidence-panel-header">
-              <div>
-                <span className="chat-context-label">SOURCE INSPECTOR</span>
-                <h2>Evidence, in context</h2>
-                <p>{evidenceSources.length} {evidenceSources.length === 1 ? "source" : "sources"} from the latest answer</p>
-              </div>
-              <button
-                type="button"
-                className="evidence-toggle"
-                onClick={() => setEvidencePanelCollapsed((current) => !current)}
-                aria-expanded={!evidencePanelCollapsed}
-                aria-label={evidencePanelCollapsed ? "Expand retrieved sources panel" : "Collapse retrieved sources panel"}
-                title={evidencePanelCollapsed ? "Expand sources" : "Collapse sources"}
-              >
-                {evidencePanelCollapsed ? "›" : "‹"}
-              </button>
-            </div>
-            {!evidencePanelCollapsed && (
-              <div className="evidence-list">
-                {sourcePreviewLoading && <p role="status">Loading source passage…</p>}
-                {sourcePreviewError && <p role="alert">{sourcePreviewError}</p>}
-                {sourcePreview && (
-                  <section className="source-preview-card" aria-label="Cited source text">
-                    <strong>{sourcePreview.filename} — chunk {sourcePreview.chunk_id}</strong>
-                    <button type="button" onClick={() => void copyText(sourcePreview.text)}>Copy passage</button><button type="button" onClick={() => setSourcePreview(null)} aria-label="Close source passage">Close</button>
-                    <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{sourcePreview.text}</p>
-                  </section>
-                )}
-                {evidenceSources.length === 0 ? (
-                  <div className="evidence-empty">
-                    <span className="evidence-empty-mark">“</span>
-                    <strong>Sources belong here.</strong>
-                    <p>Referenced passages appear alongside each answer, so you can check what it says.</p>
-                  </div>
-                ) : evidenceSources.map((source, index) => (
-                  <article className="evidence-card" key={`${source.document_id}-${source.chunk_id}-${index}`}>
-                    <div className="evidence-card-top">
-                      <span className="evidence-document-mark">{source.filename.split(".").pop()?.toUpperCase() ?? "DOC"}</span>
-                      <span className="evidence-score">{source.score.toFixed(2)}</span>
-                    </div>
-                    <strong className="evidence-filename" title={source.filename}>{source.filename}</strong>
-                    <p className="evidence-citation">{source.citation}</p>
-                    <div className="evidence-card-footer">Chunk {source.chunk_id}</div>
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => void previewSource(source)}
-                      aria-label={`Read cited passage ${source.citation} from ${source.filename}`}
-                    >
-                      Read source passage
+          {activeView === "history" && (
+            <section className="lm-view lm-history" aria-label="Conversation history">
+              <div className="lm-page-header"><div><p className="lm-overline">YOUR RESEARCH ARCHIVE</p><h1>Conversations</h1><p>Find, continue and organize your saved research threads.</p></div><button type="button" className="lm-primary-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New conversation</button></div>
+              <div className="lm-history-panel">
+                <div className="lm-section-header"><div><h2>{showArchived ? "Archived conversations" : "Recent conversations"}</h2><p>{visibleConversations.length} threads</p></div><div className="lm-history-tools"><label className="lm-search"><span aria-hidden="true">⌕</span><input type="search" aria-label="Find a conversation" placeholder="Search conversations" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} /></label><button type="button" className="lm-outline-button" onClick={() => setShowArchived((v) => !v)}>{showArchived ? "Show active" : "Archived"}</button></div></div>
+                {conversationError && <div className="lm-error" role="alert">{conversationError}</div>}
+                {conversationsLoading ? <div className="lm-table-empty">Loading conversations...</div> : visibleConversations.length === 0 ? <div className="lm-table-empty"><strong>No matching conversations</strong><p>Your conversations will appear here.</p></div> : visibleConversations.map((conversation) => (
+                  <article className="lm-thread" key={conversation.id}>
+                    <button type="button" className="lm-thread-open" disabled={conversationControlsDisabled} onClick={() => void openConversation(conversation.id)}>
+                      <span className="lm-thread-icon">▤</span><span><strong>{conversation.title}</strong><small>{conversation.message_count} messages · {new Date(conversation.updated_at).toLocaleDateString()}</small></span><span className="lm-thread-arrow">↗</span>
                     </button>
+                    <div className="lm-thread-actions">
+                      {!conversation.is_archived && <button type="button" disabled={conversationControlsDisabled} onClick={() => void renameConversation(conversation)}>Rename</button>}
+                      <button type="button" disabled={conversationControlsDisabled} onClick={() => void toggleArchive(conversation)}>{conversation.is_archived ? "Restore" : "Archive"}</button>
+                      <button type="button" className="lm-delete" disabled={conversationControlsDisabled} onClick={() => void deleteConversation(conversation)}>Delete</button>
+                    </div>
                   </article>
                 ))}
+                {!conversationsLoading && conversationNextCursor && <button className="lm-load-more" type="button" onClick={() => void loadMoreConversations()} disabled={loadingMoreConversations || conversationControlsDisabled}>{loadingMoreConversations ? "Loading..." : "Load more conversations"}</button>}
               </div>
-            )}
-          </aside>
+            </section>
+          )}
+
+          {activeView === "research" && (
+            <section className="lm-view lm-research" aria-label="Document research">
+              <div className="lm-page-header lm-research-header"><div><p className="lm-overline">ASK &amp; VERIFY / RESEARCH</p><h1>Research</h1><p>Explore your material and inspect the passages behind each answer.</p></div><button type="button" className="lm-outline-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New thread</button></div>
+              <div className="lm-scope-toolbar"><label htmlFor="lm-document-scope">Source collection</label><select id="lm-document-scope" value={selectedDocumentId ?? ""} onChange={(event) => setSelectedDocumentId(event.target.value || null)}><option value="">All documents</option>{documents.map((doc) => <option value={doc.document_id} key={doc.document_id}>{doc.filename}</option>)}</select><span>{selectedDocument ? "Questions are limited to this document" : "Search across your indexed library"}</span></div>
+              <div className="lm-research-grid">
+                <section className="lm-answer-panel" aria-label="Question and answer">
+                  <div className="lm-answer-header"><div><small>ACTIVE THREAD</small><h2>{activeConversation?.title ?? "New research"}</h2></div><span>{messages.length} messages</span></div>
+                  {messagesLoading ? <div className="lm-answer-empty" role="status">Opening conversation...</div> :
+                    messages.length === 0 ? (
+                      <div className="lm-answer-empty"><span className="lm-answer-empty-icon" aria-hidden="true">⌕</span><h2>Start with a question.</h2><p>Summarize a file, explore a concept or compare two ideas. We'll keep the source passages alongside your answer.</p><div className="lm-starter-prompts"><button type="button" onClick={() => setQuestion("Summarize the document.")}>Summarize the document ↗</button><button type="button" onClick={() => setQuestion("What are the key topics covered?")}>Find key topics ↗</button></div></div>
+                    ) : <div className="lm-answer-messages">{messages.map((message) => <article className={"lm-answer-message " + (message.role === "user" ? "is-user" : "is-assistant")} key={message.id}><div className="lm-message-author">{message.role === "user" ? "YOU ASKED" : "LOCALMIND"}</div><div className="lm-message-text">{message.status === "failed" && !message.content ? "This answer could not be generated." : message.content}</div>{message.role === "assistant" && message.status === "complete" && <button type="button" className="lm-copy" onClick={() => void copyText(message.content)}>Copy answer</button>}{message.status === "failed" && <span className="lm-message-failed">Generation failed</span>}</article>)}{isLoading && <div className="lm-thinking" role="status">Researching your documents...</div>}<div ref={messagesEndRef} aria-hidden="true" /></div>}
+                  {error && <div className="lm-error" role="alert">{error}</div>}
+                  <form className="lm-composer" onSubmit={sendMessage}><textarea aria-label="Ask a question about your documents" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about your documents..." rows={2} disabled={isLoading || messagesLoading} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (question.trim() && !isLoading && !messagesLoading) event.currentTarget.form?.requestSubmit(); } }} /><div><small>Enter to ask · Shift + Enter for a new line</small><button className="lm-primary-button" type="submit" disabled={!question.trim() || isLoading || messagesLoading}>{isLoading ? "Working..." : "Ask question ↗"}</button></div></form>
+                  {copyNotice && <div className="lm-notice" role="status">{copyNotice}<button type="button" onClick={() => setCopyNotice(null)}>×</button></div>}
+                </section>
+                <aside className="lm-evidence-panel" aria-label="Source evidence">
+                  <div className="lm-evidence-header"><div><small>REFERENCES</small><h2>Source evidence</h2><p>{evidenceSources.length} passages from the latest answer</p></div><button type="button" aria-label={evidencePanelCollapsed ? "Expand sources" : "Collapse sources"} aria-expanded={!evidencePanelCollapsed} onClick={() => setEvidencePanelCollapsed((v) => !v)}>{evidencePanelCollapsed ? "+" : "−"}</button></div>
+                  {!evidencePanelCollapsed && <div className="lm-evidence-body">
+                    {sourcePreviewLoading && <p role="status">Loading source passage...</p>}
+                    {sourcePreviewError && <p role="alert" className="lm-error">{sourcePreviewError}</p>}
+                    {sourcePreview && <section className="lm-source-preview"><div><strong>{sourcePreview.filename}</strong><button type="button" onClick={() => setSourcePreview(null)}>Close</button></div><small>PASSAGE {sourcePreview.chunk_id}</small><p>{sourcePreview.text}</p><button type="button" className="lm-outline-button" onClick={() => void copyText(sourcePreview.text)}>Copy passage</button></section>}
+                    {evidenceSources.length === 0 ? <div className="lm-evidence-empty"><span aria-hidden="true">▤</span><strong>Evidence, not guesswork.</strong><p>Retrieved source passages will appear here after your question.</p></div> :
+                    evidenceSources.map((source, index) => <article className="lm-evidence-item" key={source.document_id + "-" + source.chunk_id + "-" + index}><span className="lm-citation">{source.citation}</span><div><strong title={source.filename}>{source.filename}</strong><small>Passage {source.chunk_id}</small><button type="button" onClick={() => void previewSource(source)}>Read original passage ↗</button></div></article>)}
+                  </div>}
+                </aside>
+              </div>
+            </section>
+          )}
         </div>
+        <footer className="lm-footer"><span>LocalMind · Private knowledge workspace</span><span>Documents first. Answers with context.</span></footer>
+        <input ref={fileInputRef} type="file" className="lm-hidden-file" accept=".pdf,.docx,.txt,.md" onChange={handleFileChange} />
       </section>
     </main>
   );
