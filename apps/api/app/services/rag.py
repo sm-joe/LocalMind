@@ -128,6 +128,7 @@ class RAGService:
         self,
         question: str,
         top_k: int | None = None,
+        document_id: str | None = None,
     ) -> RAGResponse:
         normalized_question = question.strip()
 
@@ -146,7 +147,20 @@ class RAGService:
             "retrieve_document",
             None,
         )
-        if summary_mode and callable(retrieve_document):
+        if document_id is not None:
+            retrieve_selected = getattr(
+                self.retrieval_service, "retrieve_document_by_id", None
+            )
+            if not callable(retrieve_selected):
+                raise RuntimeError("Selected-document retrieval is unavailable.")
+            retrieval_result = retrieve_selected(
+                document_id=document_id,
+                query=normalized_question,
+            )
+            # Explicit selection uses the full available document for grounded
+            # extraction, rather than a semantically chosen subset.
+            summary_mode = True
+        elif summary_mode and callable(retrieve_document):
             retrieval_result = retrieve_document(
                 normalized_question,
                 limit=(
