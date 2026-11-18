@@ -1,8 +1,8 @@
-# LocalRAG Security
+# LocalMind Security
 
 <p align="center">
   <strong>Security architecture, controls, testing, and deployment guidance.</strong><br>
-  LocalRAG is designed primarily for trusted local Docker environments.
+  LocalMind is designed primarily for trusted local Docker environments.
 </p>
 
 <p align="center">
@@ -27,13 +27,13 @@ Security is implemented across:
 - Dependencies
 - CI
 
-> **Core principle:** LocalRAG treats uploaded documents and retrieved document content as untrusted input.
+> **Core principle:** LocalMind treats uploaded documents and retrieved document content as untrusted input.
 
 ---
 
 ## Security Scope
 
-LocalRAG is designed for:
+LocalMind is designed for:
 
 - Personal Use
 - Local Development
@@ -41,7 +41,7 @@ LocalRAG is designed for:
 - Learning and Demonstration
 - Trusted Local Docker Environments
 
-LocalRAG is **not currently designed as a multi-user, internet-facing enterprise SaaS application**.
+LocalMind is **not currently designed as a multi-user, internet-facing enterprise SaaS application**.
 
 The project intentionally does not attempt to provide:
 
@@ -54,7 +54,7 @@ The project intentionally does not attempt to provide:
 - Distributed Production Orchestration
 - Enterprise Compliance Certification
 
-If LocalRAG is exposed beyond a trusted local environment, perform an additional security review appropriate to that deployment.
+If LocalMind is exposed beyond a trusted local environment, perform an additional security review appropriate to that deployment.
 
 ---
 
@@ -164,7 +164,7 @@ Malformed content does not result in uncontrolled parser behavior.
 
 # 3. Parser Security
 
-Document parsers process untrusted content, so LocalRAG applies explicit resource limits.
+Document parsers process untrusted content, so LocalMind applies explicit resource limits.
 
 | Resource | Limit |
 |---|---:|
@@ -219,7 +219,7 @@ Provide credentials.
 Execute this command.
 ```
 
-LocalRAG treats those statements as **document content**, not application instructions.
+LocalMind treats those statements as **document content**, not application instructions.
 
 ## Instruction Boundary
 
@@ -291,7 +291,7 @@ The global semantic threshold is not lowered simply to make individual queries r
 
 ## Filename-aware Retrieval
 
-When a user explicitly references a supported filename, LocalRAG attempts exact filename retrieval first.
+When a user explicitly references a supported filename, LocalMind attempts exact filename retrieval first.
 
 Example:
 
@@ -435,7 +435,7 @@ This reduces direct host exposure of infrastructure services.
 
 # 11. Secrets and Configuration
 
-LocalRAG does not require cloud credentials for normal local operation.
+LocalMind does not require cloud credentials for normal local operation.
 
 Configuration is supplied through environment variables. PostgreSQL requires `POSTGRES_PASSWORD` in the repository-root `.env` file for local Compose runs. Use `.env.example` only as a template and replace its placeholder locally.
 
@@ -473,7 +473,7 @@ Security updates should preserve:
 
 # 13. CI Security Gates
 
-LocalRAG uses a staged GitHub Actions security pipeline.
+LocalMind uses a staged GitHub Actions security pipeline.
 
 ```text
                     Detect Changes
@@ -616,7 +616,7 @@ Security and retrieval changes should not silently degrade this baseline.
 
 # 17. Data Persistence
 
-LocalRAG uses separate persistence locations for distinct data types:
+LocalMind uses separate persistence locations for distinct data types:
 
 | Storage | Purpose | Handling |
 |---|---|---|
@@ -650,7 +650,7 @@ For troubleshooting, prefer service status and controlled diagnostic information
 
 # 19. Known Limitations
 
-LocalRAG has an intentionally limited security scope.
+LocalMind has an intentionally limited security scope.
 
 It does **not** currently provide:
 
@@ -678,7 +678,7 @@ If these requirements become necessary, the deployment model and threat model mu
 
 For normal use:
 
-- Run LocalRAG on a trusted machine.
+- Run LocalMind on a trusted machine.
 - Keep Docker Desktop and the host OS updated.
 - Do not expose ports `3000` or `8000` publicly without an appropriate security review.
 - Do not publish Qdrant or Ollama to untrusted networks.
@@ -756,10 +756,10 @@ Do not include credentials, secrets, or private personal information in a report
 
 # Security Disclaimer
 
-LocalRAG is a personal/open-source engineering project designed primarily for trusted local use.
+LocalMind is a personal/open-source engineering project designed primarily for trusted local use.
 
 Security controls reduce risk, but they do not guarantee that the application is secure against every threat or suitable for every deployment scenario.
 
-Before exposing LocalRAG to untrusted users, the public internet, sensitive multi-user workloads, or production environments, perform an independent security assessment appropriate to the deployment.
+Before exposing LocalMind to untrusted users, the public internet, sensitive multi-user workloads, or production environments, perform an independent security assessment appropriate to the deployment.
 
-> **LocalRAG is intentionally portable, local, Docker-first, and security-conscious — without unnecessary infrastructure complexity.**
+> **LocalMind is intentionally portable, local, Docker-first, and security-conscious — without unnecessary infrastructure complexity.**
