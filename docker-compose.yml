@@ -178,6 +178,10 @@ services:
           fi
         fi
 
+        # The init image runs as root, while the serving image deliberately
+        # uses UID/GID 10001. Without transferring ownership of the shared
+        # named volume, later model pulls fail with EACCES on blobs/*-partial-*.
+        chown -R 10001:10001 /opt/ollama-models
         echo "Ollama model initialization completed."
 
   ollama:
