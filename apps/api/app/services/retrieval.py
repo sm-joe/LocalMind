@@ -172,6 +172,52 @@ class RetrievalService:
             total_start=total_start,
         )
 
+    def retrieve_document_by_id(
+        self,
+        document_id: str,
+        query: str,
+    ) -> RetrievalResult:
+        """Read an explicitly selected document without semantic guessing.
+
+        Chunk IDs are stable citation references; every result is verified
+        to belong to the selected document before reaching the model.
+        """
+        if not document_id.strip():
+            raise ValueError("Document ID cannot be empty.")
+        start = perf_counter()
+        chunks: list[RetrievedChunk] = []
+        seen: set[int] = set()
+        for point in self.vector_store.iter_points(document_id=document_id):
+            payload = point.payload or {}
+            if str(payload.get("document_id", "")) != document_id:
+                continue
+            chunk = self._build_chunk(payload, 1.0)
+            if chunk is None or chunk.chunk_id in seen:
+                continue
+            seen.add(chunk.chunk_id)
+            chunks.append(chunk)
+        chunks.sort(key=lambda item: item.chunk_id)
+        diagnostics = RetrievalDiagnostics(
+            requested_limit=len(chunks),
+            candidate_count=len(chunks),
+            returned_count=len(chunks),
+            filtered_count=0,
+            top_candidate_score=1.0 if chunks else None,
+            bottom_candidate_score=1.0 if chunks else None,
+            top_score=1.0 if chunks else None,
+            bottom_score=1.0 if chunks else None,
+            has_context=bool(chunks),
+        )
+        return RetrievalResult(
+            chunks=chunks,
+            diagnostics=diagnostics,
+            performance=RetrievalPerformance(
+                embedding_ms=0.0,
+                search_ms=round((perf_counter() - start) * 1000, 2),
+                total_ms=round((perf_counter() - start) * 1000, 2),
+            ),
+        )
+
     def retrieve_document(
         self,
         query: str,
