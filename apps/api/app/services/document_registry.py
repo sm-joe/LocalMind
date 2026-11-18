@@ -41,7 +41,9 @@ class DocumentIndexRegistry:
         self.session_factory = session_factory or get_session_factory()
 
     def acquire(
-        self, document_hash: str, filename: str, content_type: str,\n        force: bool = False,\n    ) -> IndexClaim:
+        self, document_hash: str, filename: str, content_type: str,
+        force: bool = False,
+    ) -> IndexClaim:
         now = datetime.now(timezone.utc)
         proposed_id = str(uuid.uuid4())
         with self.session_factory() as db:
