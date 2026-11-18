@@ -115,6 +115,9 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   const [question, setQuestion] = useState("");
   const [conversationSearch, setConversationSearch] = useState("");
   const [documentSearch, setDocumentSearch] = useState("");
+  const [activeView, setActiveView] = useState<"library" | "research" | "history">("library");
+  const [fileTypeFilter, setFileTypeFilter] = useState("all");
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
@@ -282,6 +285,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
   async function openConversation(conversationId: string) {
     const requestId = ++messageLoadRequestRef.current;
     setActiveConversationId(conversationId);
+    setActiveView("research");
     setMessages([]);
     setError(null);
     setConversationError(null);
@@ -351,6 +355,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       ]);
       messageLoadRequestRef.current += 1;
       setActiveConversationId(conversation.id);
+      setActiveView("research");
       setMessages([]);
       setQuestion("");
       setMessagesLoading(false);
@@ -463,6 +468,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     setError(null);
     setConversationError(null);
     setIsLoading(true);
+    setActiveView("research");
 
     const optimisticId = `optimistic-${crypto.randomUUID()}`;
     setMessages((current) => [
@@ -502,7 +508,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
           "Content-Type": "application/json",
           "Idempotency-Key": crypto.randomUUID(),
         },
-        body: JSON.stringify({ question: trimmedQuestion, top_k: 3, conversation_id: conversationId }),
+        body: JSON.stringify({ question: trimmedQuestion, top_k: 3, conversation_id: conversationId, ...(selectedDocumentId ? { document_id: selectedDocumentId } : {}) }),
       });
       if (!response.ok) {
         throw await responseError(response, "Unable to start document answering.");
@@ -670,8 +676,11 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     item.title.toLowerCase().includes(conversationSearch.trim().toLowerCase()),
   );
   const visibleDocuments = documents.filter((item) =>
-    item.filename.toLowerCase().includes(documentSearch.trim().toLowerCase()),
+    item.filename.toLowerCase().includes(documentSearch.trim().toLowerCase()) &&
+    (fileTypeFilter === "all" || item.filename.toLowerCase().endsWith("." + fileTypeFilter)),
   );
+  const indexedChunks = documents.reduce((total, item) => total + item.chunks, 0);
+  const selectedDocument = documents.find((item) => item.document_id === selectedDocumentId);
   const evidenceSources = [...messages]
     .reverse()
     .find((message) => message.role === "assistant" && (message.sources?.length ?? 0) > 0)
