@@ -143,11 +143,11 @@ Only run this after the stack is healthy. This does not change the active LLM_MO
 Pause document uploads and chat writes before taking backups.
 
 ~~~bash
-python3 scripts/backup_localrag.py --output backups
-python3 scripts/backup_localrag.py --verify backups/<backup-folder>
+python3 scripts/backup_localmind.py --output backups
+python3 scripts/backup_localmind.py --verify backups/<backup-folder>
 ~~~
 
-The backup script keeps its original filename for backwards compatibility. Backups contain private data. Encrypt them and verify a real restore separately; a passing hash check is not a full disaster-recovery test.
+The LocalMind backup command delegates to the existing, backward-compatible backup implementation. Backups contain private data. Encrypt them and verify a real restore separately; a passing hash check is not a full disaster-recovery test.
 
 After uploading the evaluation fixture, run a real model-based evaluation:
 
