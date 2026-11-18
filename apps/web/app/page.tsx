@@ -282,10 +282,10 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     }));
   }
 
-  async function openConversation(conversationId: string) {
+  async function openConversation(conversationId: string, navigate = true) {
     const requestId = ++messageLoadRequestRef.current;
     setActiveConversationId(conversationId);
-    setActiveView("research");
+    if (navigate) setActiveView("research");
     setMessages([]);
     setError(null);
     setConversationError(null);
@@ -320,7 +320,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
       const items = await loadConversations();
       const mostRecentActive = items?.find((item) => !item.is_archived);
       if (mostRecentActive && !activeConversationId) {
-        await openConversation(mostRecentActive.id);
+        await openConversation(mostRecentActive.id, false);
       }
     })();
     // Initial load should run once; handlers use the current state when invoked.
