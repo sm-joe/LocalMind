@@ -842,7 +842,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                         </div>
                       </div>
                     )}
-                    {message.role === "assistant" && message.status !== "failed" && (!message.sources || message.sources.length === 0) && (
+                    {message.role === "assistant" && message.status === "complete" && !error && message.content.trim() !== "" && (!message.sources || message.sources.length === 0) && (
                       <div className="source-status" role="note">
                         <span className="source-status-icon" aria-hidden="true">i</span>
                         <div>
