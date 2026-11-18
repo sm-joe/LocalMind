@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +19,7 @@ class Settings(BaseSettings):
 
     llm_provider: str = "ollama"
     llm_model: str = "llama3.2:3b"
+    ollama_num_ctx: int = Field(default=6144, ge=2048, le=32768)
     embedding_model: str = "nomic-embed-text"
 
     database_url: str | None = None
