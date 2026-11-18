@@ -43,7 +43,7 @@ class RAGResponse:
 class RAGService:
     # Conservative character budget for local 3B models; this is not a
     # tokenizer-based guarantee, but prevents unbounded prompt construction.
-    MAX_CONTEXT_CHARS = 24_000
+    MAX_CONTEXT_CHARS = 14_000
     MAX_CONTEXT_CHUNKS = 20
     CITATION_PATTERN = re.compile(r"\[(\d+)\]")
     EXPLICIT_SOURCE_PATTERN = re.compile(r"⟦SRC:(\d+)⟧")
