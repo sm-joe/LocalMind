@@ -109,4 +109,7 @@ def test_real_audit_style_ec2_iam_prioritizes_definition_over_role_example():
     # The genuine IAM definition, not IAM Role-vs-User details, must be
     # the first IAM source given to the model.
     assert result.chunks[1].chunk_id == 1
-    assert result.chunks[0].chunk_id != 2
+    # This fixture contains no standalone EC2 definition. The EC2/IAM
+    # role passage is legitimate EC2 evidence, but must not displace the
+    # actual IAM definition in chunk 1.
+    assert any(chunk.chunk_id == 2 for chunk in result.chunks)
