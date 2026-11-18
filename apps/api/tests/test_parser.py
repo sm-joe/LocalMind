@@ -312,6 +312,8 @@ def test_parse_docx_includes_table_content_in_original_body_order(tmp_path: Path
     assert "IAM controls permissions" in text
     assert text.index("EC2 provides") < text.index("What is Amazon Bedrock?")
     assert text.index("What is Amazon Bedrock?") < text.index("S3 stores")
+    assert "\\n\\n" not in ""  # keep blank-lines explicit in source assertion below
+    assert "\n\n" in text
 
 
 def test_parse_docx_with_only_table_content(tmp_path: Path):
