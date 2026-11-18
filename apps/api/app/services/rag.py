@@ -269,10 +269,11 @@ class RAGService:
             # For requested document-wide lists, an ungrounded generation
             # must never become an invented answer. Return only verbatim
             # indexed passages, each with its actual source citation.
-            if answer == self.INVALID_CITATION_ANSWER and summary_mode:
-                # Local 3B models sometimes omit all citation markers even
-                # after a correction pass. Never invent support: return a
-                # clearly labelled extractive fallback with real citations.
+            if answer == self.INVALID_CITATION_ANSWER:
+                # A model formatting failure must not prevent access to real
+                # evidence. Never append fabricated citations to a generated
+                # answer. Show labelled verbatim material from indexed chunks
+                # and attach each citation to its actual stored passage.
                 answer = self._verbatim_excerpts(
                     chunks=chunks,
                     requested_count=(
