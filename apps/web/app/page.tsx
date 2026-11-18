@@ -991,27 +991,55 @@ export default function Home() {
     setAuthenticated(false);
   }
 
-  if (authenticated === null) return <main className="app-shell"><p role="status">Checking session…</p></main>;
+  if (authenticated === null) return (
+    <main className="auth-loading" role="status" aria-live="polite">
+      <span className="brand-mark" aria-hidden="true">◆</span> Opening your private workspace…
+    </main>
+  );
   if (!authenticated) return (
-    <main className="app-shell">
-      <section style={{ maxWidth: 420, margin: "12vh auto", padding: 32 }}>
-        <h1>LocalRAG</h1>
-        <p>Sign in to access your private documents and conversations.</p>
-        <form onSubmit={(event) => void signIn(event)}>
-          <label htmlFor="localrag-password">Administrator password</label>
-          <input
-            id="localrag-password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            style={{ width: "100%", padding: 12, marginTop: 12, marginBottom: 16 }}
-          />
-          <button type="submit" disabled={loggingIn}>{loggingIn ? "Signing in…" : "Sign in"}</button>
-          {loginError && <p role="alert">{loginError}</p>}
-        </form>
-      </section>
+    <main className="auth-shell">
+      <header className="auth-header">
+        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">◆</span><span>localrag</span></div>
+        <span className="auth-header-label"><span className="status-dot" /> SELF-HOSTED KNOWLEDGE WORKSPACE</span>
+      </header>
+      <div className="auth-layout">
+        <section className="auth-story" aria-label="About LocalRAG">
+          <span className="auth-kicker">PRIVATE BY DESIGN · POWERED BY YOUR DATA</span>
+          <h1>Your documents.<br />Your answers.<br /><em>Your control.</em></h1>
+          <p>Turn scattered files into searchable knowledge. Ask better questions, uncover what matters, and see exactly where every answer came from.</p>
+          <div className="auth-steps" aria-label="How it works">
+            <div><span>01</span><div><strong>Bring your knowledge</strong><p>Upload PDFs, Word documents, Markdown, and text files.</p></div></div>
+            <div><span>02</span><div><strong>Ask naturally</strong><p>Explore your library through a conversation.</p></div></div>
+            <div><span>03</span><div><strong>Verify every insight</strong><p>Open the passages behind cited answers.</p></div></div>
+          </div>
+        </section>
+        <section className="auth-card" aria-labelledby="auth-title">
+          <div className="auth-card-icon" aria-hidden="true">✦</div>
+          <p className="eyebrow">WELCOME BACK</p>
+          <h2 id="auth-title">Sign in to LocalRAG</h2>
+          <p className="auth-card-description">Your private knowledge workspace is ready when you are.</p>
+          <form onSubmit={(event) => void signIn(event)}>
+            <label htmlFor="localrag-password">Administrator password</label>
+            <input
+              id="localrag-password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="Enter your administrator password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              aria-invalid={Boolean(loginError)}
+              aria-describedby={loginError ? "auth-error" : undefined}
+            />
+            {loginError && <div id="auth-error" className="auth-error" role="alert">{loginError}</div>}
+            <button type="submit" className="auth-submit" disabled={loggingIn || !password.trim()}>
+              {loggingIn ? "Verifying…" : "Enter workspace"} <span aria-hidden="true">↗</span>
+            </button>
+          </form>
+          <div className="auth-card-foot"><span className="status-dot" /> Runs on your own infrastructure. No cloud account required.</div>
+        </section>
+      </div>
+      <footer className="auth-footer"><span>LOCALRAG · LOCAL-FIRST INTELLIGENCE</span><span>Ollama / Qdrant / FastAPI</span></footer>
     </main>
   );
   return <Workspace onLogout={() => void signOut()} />;
