@@ -76,7 +76,7 @@ def test_named_subject_not_in_index_reports_limit_without_guessing():
         "what is Amazon Bedrock service mentioned in the document?"
     ))[-1][1]
     assert result.sources == []
-    assert "couldn't find an exact mention" in result.answer
+    assert "is not mentioned in the indexed" in result.answer
     assert "indexed document text" in result.answer
 
 
