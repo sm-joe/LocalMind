@@ -267,23 +267,63 @@ class RetrievalService:
                 left_only.append(chunk)
             elif has_right:
                 right_only.append(chunk)
-        # Preserve evidence for BOTH subjects rather than allowing the
-        # more frequent name to crowd out the other.
+        # Select definitional passages for each subject, not whichever
+        # incidental mention Qdrant's scroll happens to return first.
+        # E.g. "Why use IAM roles on EC2?" must not outrank
+        # "What is AWS IAM? Answer: IAM controls who can access ...".
+        def definition_score(chunk: RetrievedChunk, term: str) -> tuple[int, int]:
+            found = re.search(
+                rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])",
+                chunk.text, re.IGNORECASE,
+            )
+            if not found:
+                return (-1, 0)
+            before = chunk.text[max(0, found.start() - 48):found.start()]
+            after = chunk.text[found.end():found.end() + 180]
+            question = bool(re.search(
+                rf"(?:what is|define|explain)\s+(?:aws|amazon)?\s*$",
+                before, re.IGNORECASE,
+            ))
+            description = bool(re.search(
+                r"^\s*(?:\([^)]*\))?\s*(?:is|provides|allows|manages|"
+                r"controls|offers|enables)\b", after, re.IGNORECASE,
+            ))
+            role_example = bool(re.search(
+                r"\b(?:roles?|keys?|instances?|scaling|load balanc)\b",
+                before[-30:] + after[:60], re.IGNORECASE,
+            ))
+            score = int(question) * 5 + int(description) * 4 - int(role_example)
+            return (score, -chunk.chunk_id)
+
+        left_candidates = sorted(left_only + both,
+                                 key=lambda c: definition_score(c, left),
+                                 reverse=True)
+        right_candidates = sorted(right_only + both,
+                                  key=lambda c: definition_score(c, right),
+                                  reverse=True)
         selected: list[RetrievedChunk] = []
-        # Lead with a definition for each side (when available), so a
-        # comparison prompt and its citation mapping are naturally balanced.
-        for group in (left_only, right_only):
-            if group and len(selected) < limit:
-                selected.append(group[0])
-        for chunk in both:
+        selected_keys: set[tuple[str, int]] = set()
+        for group in (left_candidates, right_candidates):
+            for chunk in group:
+                key = (chunk.document_id, chunk.chunk_id)
+                if key not in selected_keys and len(selected) < limit:
+                    selected.append(chunk)
+                    selected_keys.add(key)
+                    break
+        # Use the remaining budget for other substantive passages, still
+        # keeping the strongest evidence ahead of incidental mentions.
+        for chunk in sorted(
+            left_candidates + right_candidates,
+            key=lambda c: max(definition_score(c, left),
+                              definition_score(c, right)),
+            reverse=True,
+        ):
+            key = (chunk.document_id, chunk.chunk_id)
             if len(selected) >= limit:
                 break
-            selected.append(chunk)
-        for group in (left_only[1:], right_only[1:]):
-            for chunk in group:
-                if len(selected) >= limit:
-                    break
+            if key not in selected_keys:
                 selected.append(chunk)
+                selected_keys.add(key)
         # An answer would be deceptive if the document never mentions one
         # of the requested concepts. Do not ask Ollama to guess that half.
         if not any(contains(left, c.text) for c in selected) or not any(
