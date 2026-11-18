@@ -207,7 +207,7 @@ class RetrievalService:
             match = needle.search(chunk.text)
             text_after = chunk.text[match.start():match.end() + 120] if match else ""
             definition = bool(re.search(
-                r"\\b(?:is|provides|offers|enables|allows|service|platform)\\b",
+                r"\b(?:is|provides|offers|enables|allows|service|platform)\b",
                 text_after, re.IGNORECASE
             ))
             return (int(definition), -chunk.chunk_id)
