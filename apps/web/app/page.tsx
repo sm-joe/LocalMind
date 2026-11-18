@@ -551,7 +551,19 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
         }
       };
       while (true) {
-        const { done, value } = await reader.read();
+        let next: ReadableStreamReadResult<Uint8Array>;
+        try {
+          next = await reader.read();
+        } catch {
+          // Streaming fetch can already have returned HTTP 200 when the
+          // proxy, Ollama, or API disconnects. A browser TypeError otherwise
+          // surfaces as an unhelpful generic "Network error".
+          throw new Error(
+            "The answer stream disconnected before completion. " +
+            "Check the web, api, and ollama container logs; indexed documents are unchanged.",
+          );
+        }
+        const { done, value } = next;
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const frames = buffer.split("\n\n");
