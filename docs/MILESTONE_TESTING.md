@@ -46,9 +46,9 @@ Verify the signed web session with curl's cookie jar:
 
 ~~~bash
 cookie_jar=$(mktemp)
+ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 -c 'import json,os; print(json.dumps({"password":os.environ["ADMIN_PASSWORD"]}))' | \
 curl -fsS -c "$cookie_jar" -H 'Origin: http://localhost:3000' \
-  -H 'Content-Type: application/json' \
-  --data "$(ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 -c 'import json,os; print(json.dumps({"password":os.environ["ADMIN_PASSWORD"]}))')" \
+  -H 'Content-Type: application/json' --data-binary @- \
   http://localhost:3000/api/auth/login
 curl -fsS -b "$cookie_jar" http://localhost:3000/api/auth/session
 curl -fsS -b "$cookie_jar" http://localhost:3000/api/backend/documents
