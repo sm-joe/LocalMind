@@ -398,6 +398,8 @@ class RAGService:
             llm_ms = (perf_counter() - generating) * 1000
             raw_answer = self._normalize_answer("".join(pieces))
             answer = self._validate_citations(raw_answer, len(chunks))
+            if requested_count_match and answer != self.INVALID_CITATION_ANSWER:
+                answer = self._verify_extracted_list(answer, chunks)
             if answer == self.INVALID_CITATION_ANSWER:
                 # A formatting error is not a summary error. Preserve useful
                 # synthesis, but clearly disclose that individual claims
@@ -422,6 +424,41 @@ class RAGService:
                 total_ms=round((perf_counter() - started) * 1000, 2),
             ),
         ))
+
+    @classmethod
+    def _verify_extracted_list(
+        cls, answer: str, chunks: list[RetrievedChunk]
+    ) -> str:
+        """Check that numbered source-extraction items actually occur in cited text.
+
+        This intentionally only checks literal names, not semantic entailment.
+        Claims we cannot verify are omitted rather than disguised as cited facts.
+        """
+        numbered = re.findall(r"(?m)^\\s*\\d+[.)]\\s+(.+?)\\s*$", answer)
+        if not numbered:
+            return answer
+        verified: list[str] = []
+        for item in numbered:
+            citation_ids = [
+                int(match.group(1)) for match in cls.CITATION_PATTERN.finditer(item)
+            ]
+            name = cls.CITATION_PATTERN.sub("", item).strip()
+            name = re.sub(r"^[*_`]+|[*_`]+$", "", name).strip(" -.:")
+            # Parenthetical expansions can differ from the source's
+            # abbreviated service names (e.g., IAM).
+            short_name = name.split(" (", 1)[0].strip().casefold()
+            if not short_name or not citation_ids:
+                continue
+            if any(
+                1 <= index <= len(chunks)
+                and short_name in chunks[index - 1].text.casefold()
+                for index in citation_ids
+            ):
+                verified.append(f"{len(verified) + 1}. {name} "
+                                + "".join(f"[{i}]" for i in citation_ids))
+        if not verified:
+            return cls.INVALID_CITATION_ANSWER
+        return "\\n".join(verified)
 
     @classmethod
     def _verbatim_excerpts(
