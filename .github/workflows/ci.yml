@@ -164,7 +164,8 @@ jobs:
 
   product-api-tests:
     name: Product RAG Unit Tests
-    if: github.ref == 'refs/heads/feat/product-workspace-experience'
+    if: needs.changes.outputs.ci == 'true'
+    needs: changes
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -243,9 +244,9 @@ jobs:
 
   docker-build:
     name: Docker Build
-    # Avoid expensive image scans on every PR push. They are required on
-    # application-image changes merged to main or explicit release checks.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.docker == 'true')
+    # Run expensive image scans only for image-related changes on PRs targeting
+    # main, qualifying pushes to main, or explicit release verification.
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
 
     needs:
