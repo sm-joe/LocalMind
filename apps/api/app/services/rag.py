@@ -121,7 +121,7 @@ class RAGService:
         # 12 short DOCX chunks should not result in a ~14k-character
         # prompt and minutes of CPU prefill. The smaller summary budget
         # samples every selected section and retains citation mapping.
-        context_budget = min(cls.MAX_CONTEXT_CHARS, 6_000) if summary_mode else cls.MAX_CONTEXT_CHARS
+        context_budget = min(cls.MAX_CONTEXT_CHARS, 4_200) if summary_mode else cls.MAX_CONTEXT_CHARS
         per_chunk_chars = max(1, context_budget // len(selected))
         return [
             replace(chunk, text=chunk.text[:per_chunk_chars])
