@@ -45,7 +45,7 @@ def test_bedrock_found_in_late_indexed_chunk_and_answered():
     ))[-1][1]
     assert "managed generative AI service" in result.answer
     assert result.sources[0].chunk_id == 11
-    assert result.retrieval.embedding_ms == 0
+    assert result.performance.embedding_ms == 0
 
 
 def test_bedrock_mention_in_middle_of_long_chunk_survives_prompt_trimming():
