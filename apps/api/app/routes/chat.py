@@ -88,7 +88,10 @@ def create_rag_service() -> RAGService:
         embedding_service=embedding_service,
         vector_store=vector_store,
         top_k=5,
-        score_threshold=0.40,
+        # A fixed cosine cutoff can discard every chunk for a perfectly
+        # valid user question. Preserve the best ranked evidence instead;
+        # the RAG service still requires grounded, in-range citations.
+        score_threshold=0.0,
         lexical_weight=0.15,
     )
 
