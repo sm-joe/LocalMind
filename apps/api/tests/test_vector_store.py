@@ -479,3 +479,35 @@ def test_search_returns_empty_when_collection_does_not_exist() -> None:
     assert result == []
     store.client.get_collection.assert_not_called()
     store.client.query_points.assert_not_called()
+
+def test_document_filtered_scroll_paginates_without_collection_discovery() -> None:
+    """Document-scoped retrieval must not be blocked by an unrelated preflight."""
+    from types import SimpleNamespace
+
+    store = create_store()
+    first = SimpleNamespace(payload={"document_id": "chosen", "chunk_id": 2})
+    second = SimpleNamespace(payload={"document_id": "chosen", "chunk_id": 1})
+    store.client.get_collections.reset_mock()
+    store.client.scroll.side_effect = [
+        ([first], "cursor-1"),
+        ([second], None),
+    ]
+
+    assert list(store.iter_points(limit=1, document_id="chosen")) == [
+        first, second,
+    ]
+    store.client.get_collections.assert_not_called()
+    assert store.client.scroll.call_count == 2
+    first_call = store.client.scroll.call_args_list[0].kwargs
+    second_call = store.client.scroll.call_args_list[1].kwargs
+    assert first_call["scroll_filter"].must[0].key == "document_id"
+    assert first_call["scroll_filter"].must[0].match.value == "chosen"
+    assert second_call["offset"] == "cursor-1"
+
+
+def test_unfiltered_scroll_skips_missing_collection() -> None:
+    store = create_store()
+    store.client.get_collections.return_value.collections = []
+
+    assert list(store.iter_points()) == []
+    store.client.scroll.assert_not_called()
