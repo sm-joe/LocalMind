@@ -26,6 +26,7 @@ router = APIRouter(
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     top_k: int = Field(default=5, ge=1, le=20)
+    document_id: str | None = Field(default=None, min_length=1, max_length=128)
     # Optional for backward compatibility. New history-aware clients should
     # create a conversation and send its ID with each chat request.
     conversation_id: str | None = Field(default=None, min_length=36, max_length=36)
@@ -272,10 +273,15 @@ def chat(
 
     try:
         service = create_rag_service()
-        result = service.answer(
-            question=request.question,
-            top_k=request.top_k,
-        )
+        # Preserve the original call signature for existing clients and
+        # adapters, and activate scoped retrieval only when explicitly selected.
+        answer_options = {
+            "question": request.question,
+            "top_k": request.top_k,
+        }
+        if request.document_id is not None:
+            answer_options["document_id"] = request.document_id
+        result = service.answer(**answer_options)
 
         response = ChatResponse(
             answer=result.answer,
