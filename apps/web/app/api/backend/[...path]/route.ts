@@ -35,14 +35,40 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     if (body && body.byteLength > 12 * 1024 * 1024) {
       return NextResponse.json({ detail: "Request body too large." }, { status: 413 });
     }
-    const upstream = await fetch(target, { method: request.method, headers, body, cache: "no-store", signal: AbortSignal.timeout(120000) });
+    // A local CPU-run LLM may need several minutes for its first response.
+    // Uploads and ordinary API calls retain the shorter network timeout.
+    const timeoutMs = path.length === 1 && path[0] === "chat" && request.method === "POST"
+      ? 300000
+      : 120000;
+    const upstream = await fetch(target, {
+      method: request.method,
+      headers,
+      body,
+      cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     const result = new NextResponse(upstream.body, { status: upstream.status });
     const responseType = upstream.headers.get("content-type");
     if (responseType) result.headers.set("Content-Type", responseType);
     result.headers.set("Cache-Control", "no-store");
     return result;
-  } catch {
-    return NextResponse.json({ detail: "Backend is unavailable." }, { status: 502 });
+  } catch (error) {
+    // Do not tell the user that the API is down when a slow first model
+    // inference exceeded the gateway timeout. No internal URLs or API keys
+    // are included in the response.
+    const timedOut = error instanceof Error && (
+      error.name === "TimeoutError" || error.name === "AbortError"
+    );
+    console.error("LocalRAG API proxy request failed", {
+      operation: path[0],
+      errorType: error instanceof Error ? error.name : "unknown",
+      timedOut,
+    });
+    return NextResponse.json({
+      detail: timedOut
+        ? "The local model took too long to respond. Check Ollama memory and CPU usage, then retry."
+        : "Cannot reach the LocalRAG API. Check that the api container is running and healthy.",
+    }, { status: timedOut ? 504 : 502 });
   }
 }
 
