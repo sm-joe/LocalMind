@@ -3,12 +3,13 @@ import zipfile
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from app.config import get_settings
 from app.services.embeddings import EmbeddingService
 from app.services.ingestion import IngestionService
+from app.services.document_registry import DocumentIndexRegistry, DocumentIndexInProgress
 from app.services.vector_store import VectorStore
 
 
@@ -83,7 +84,12 @@ def create_ingestion_service() -> IngestionService:
     return IngestionService(
         embedding_service=embedding_service,
         vector_store=vector_store,
+        registry=DocumentIndexRegistry(),
     )
+
+
+def create_document_registry() -> DocumentIndexRegistry:
+    return DocumentIndexRegistry()
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -272,6 +278,7 @@ def _validate_file_content(
 )
 async def upload_document(
     file: UploadFile = File(...),
+    reindex: bool = Query(default=False),
 ) -> DocumentUploadResponse:
     if not file.filename:
         raise HTTPException(
@@ -329,6 +336,7 @@ async def upload_document(
             content_type=file.content_type
             or "application/octet-stream",
             original_filename=original_filename,
+            **({"force_reindex": True} if reindex is True else {}),
         )
 
         status = (
@@ -346,6 +354,9 @@ async def upload_document(
 
     except HTTPException:
         raise
+
+    except DocumentIndexInProgress as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     except ValueError as exc:
         raise HTTPException(
@@ -439,6 +450,65 @@ def list_documents() -> DocumentListResponse:
 
 
 
+class DocumentIndexStatusResponse(BaseModel):
+    document_id: str
+    filename: str
+    status: str
+    chunks: int
+
+
+@router.get(
+    "/status/{document_id}",
+    response_model=DocumentIndexStatusResponse,
+)
+def document_index_status(document_id: str) -> DocumentIndexStatusResponse:
+    record = create_document_registry().get_status(document_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Document indexing state not found.")
+    return DocumentIndexStatusResponse(
+        document_id=record.document_id,
+        filename=record.filename,
+        status=record.status,
+        chunks=record.chunks,
+    )
+
+
+class DocumentChunkResponse(BaseModel):
+    document_id: str
+    filename: str
+    chunk_id: int
+    text: str
+    start_char: int
+    end_char: int
+
+
+@router.get(
+    "/{document_id}/chunks/{chunk_id}",
+    response_model=DocumentChunkResponse,
+)
+def get_document_chunk(
+    document_id: str,
+    chunk_id: int,
+) -> DocumentChunkResponse:
+    if not document_id.strip() or chunk_id < 0:
+        raise HTTPException(status_code=400, detail="Invalid chunk identifier.")
+    try:
+        payload = create_vector_store().get_document_chunk(document_id, chunk_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch document chunk.")
+        raise HTTPException(status_code=503, detail="Document store unavailable.") from exc
+    if not payload or str(payload.get("document_id")) != document_id or payload.get("chunk_id") != chunk_id:
+        raise HTTPException(status_code=404, detail="Source passage not found.")
+    return DocumentChunkResponse(
+        document_id=document_id,
+        filename=str(payload.get("filename", "unknown")),
+        chunk_id=chunk_id,
+        text=str(payload.get("text", "")),
+        start_char=int(payload.get("start_char", 0)),
+        end_char=int(payload.get("end_char", 0)),
+    )
+
+
 @router.delete(
     "/{document_id}",
     response_model=DocumentDeleteResponse,
@@ -458,6 +528,7 @@ def delete_document(
         vector_store.delete_document(
             document_id
         )
+        create_document_registry().forget(document_id)
 
         return DocumentDeleteResponse(
             document_id=document_id,

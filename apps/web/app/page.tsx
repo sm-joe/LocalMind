@@ -88,8 +88,7 @@ type Message = {
   sources?: Source[];
 };
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = "/api/backend";
 
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt", ".md"];
 
@@ -111,9 +110,17 @@ async function responseError(
   return new Error(fallback);
 }
 
-export default function Home() {
+function Workspace({ onLogout }: { onLogout: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [activeView, setActiveView] = useState<"library" | "research" | "history">("library");
+  const [fileTypeFilter, setFileTypeFilter] = useState("all");
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -133,11 +140,39 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const [sourcePreview, setSourcePreview] = useState<{
+    document_id: string; filename: string; chunk_id: number; text: string;
+  } | null>(null);
+  const [sourcePreviewLoading, setSourcePreviewLoading] = useState(false);
+  const [sourcePreviewError, setSourcePreviewError] = useState<string | null>(null);
+
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const initialLoadStartedRef = useRef(false);
   const messageLoadRequestRef = useRef(0);
+
+  async function previewSource(source: Source) {
+    setSourcePreview(null);
+    setSourcePreviewError(null);
+    setSourcePreviewLoading(true);
+    setEvidencePanelCollapsed(false);
+    try {
+      const response = await fetch(
+        `${API_URL}/documents/${encodeURIComponent(source.document_id)}/chunks/${source.chunk_id}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw await responseError(response, "Could not load source passage.");
+      const data = (await response.json()) as {
+        document_id: string; filename: string; chunk_id: number; text: string;
+      };
+      setSourcePreview(data);
+    } catch (error) {
+      setSourcePreviewError(error instanceof Error ? error.message : "Could not load source passage.");
+    } finally {
+      setSourcePreviewLoading(false);
+    }
+  }
 
   async function loadDocuments() {
     setDocumentsLoading(true);
@@ -247,9 +282,10 @@ export default function Home() {
     }));
   }
 
-  async function openConversation(conversationId: string) {
+  async function openConversation(conversationId: string, navigate = true) {
     const requestId = ++messageLoadRequestRef.current;
     setActiveConversationId(conversationId);
+    if (navigate) setActiveView("research");
     setMessages([]);
     setError(null);
     setConversationError(null);
@@ -284,7 +320,7 @@ export default function Home() {
       const items = await loadConversations();
       const mostRecentActive = items?.find((item) => !item.is_archived);
       if (mostRecentActive && !activeConversationId) {
-        await openConversation(mostRecentActive.id);
+        await openConversation(mostRecentActive.id, false);
       }
     })();
     // Initial load should run once; handlers use the current state when invoked.
@@ -319,6 +355,7 @@ export default function Home() {
       ]);
       messageLoadRequestRef.current += 1;
       setActiveConversationId(conversation.id);
+      setActiveView("research");
       setMessages([]);
       setQuestion("");
       setMessagesLoading(false);
@@ -431,6 +468,7 @@ export default function Home() {
     setError(null);
     setConversationError(null);
     setIsLoading(true);
+    setActiveView("research");
 
     const optimisticId = `optimistic-${crypto.randomUUID()}`;
     setMessages((current) => [
@@ -459,34 +497,88 @@ export default function Home() {
         ]);
       }
 
-      const response = await fetch(`${API_URL}/chat`, {
+      const assistantId = `streaming-${crypto.randomUUID()}`;
+      setMessages((current) => [
+        ...current,
+        { id: assistantId, role: "assistant", content: "", sources: [], status: "pending" },
+      ]);
+      const response = await fetch(`${API_URL}/chat/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Idempotency-Key": crypto.randomUUID(),
         },
-        body: JSON.stringify({ question: trimmedQuestion, top_k: 5, conversation_id: conversationId }),
+        body: JSON.stringify({ question: trimmedQuestion, top_k: 3, conversation_id: conversationId, ...(selectedDocumentId ? { document_id: selectedDocumentId } : {}) }),
       });
       if (!response.ok) {
-        throw await responseError(response, "Unable to get a response from LocalRAG.");
+        throw await responseError(response, "Unable to start document answering.");
       }
-      const data = (await response.json()) as ChatResponse;
-      setMessages((current) => [
-        ...current.filter((message) => message.id !== optimisticId),
-        {
-          id: data.user_message_id ?? optimisticId,
-          role: "user",
-          content: trimmedQuestion,
-          status: "complete",
-        },
-        {
-          id: data.assistant_message_id ?? `assistant-${crypto.randomUUID()}`,
-          role: "assistant",
-          content: data.answer,
-          sources: data.sources,
-          status: "complete",
-        },
-      ]);
+      if (!response.body) throw new Error("The backend did not provide an answer stream.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let completed = false;
+      const consumeEvent = (payload: string) => {
+        if (!payload.startsWith("data: ")) return;
+        const event = JSON.parse(payload.slice(6)) as {
+          type: "chunk" | "done" | "error" | "status";
+          text?: string;
+          detail?: string;
+          result?: ChatResponse;
+        };
+        if (event.type === "chunk" && event.text) {
+          const token = event.text;
+          setMessages((current) => current.map((message) =>
+            message.id === assistantId
+              ? { ...message, content: message.content + token }
+              : message,
+          ));
+        } else if (event.type === "done" && event.result) {
+          completed = true;
+          const data = event.result;
+          setMessages((current) => [
+            ...current.filter((message) => message.id !== optimisticId && message.id !== assistantId),
+            {
+              id: data.user_message_id ?? optimisticId,
+              role: "user" as const,
+              content: trimmedQuestion,
+              status: "complete" as const,
+            },
+            {
+              id: data.assistant_message_id ?? assistantId,
+              role: "assistant" as const,
+              content: data.answer,
+              sources: data.sources,
+              status: "complete" as const,
+            },
+          ]);
+        } else if (event.type === "error") {
+          throw new Error(event.detail ?? "The local model could not answer.");
+        }
+      };
+      while (true) {
+        let next: ReadableStreamReadResult<Uint8Array>;
+        try {
+          next = await reader.read();
+        } catch {
+          // Streaming fetch can already have returned HTTP 200 when the
+          // proxy, Ollama, or API disconnects. A browser TypeError otherwise
+          // surfaces as an unhelpful generic "Network error".
+          throw new Error(
+            "The answer stream disconnected before completion. " +
+            "Check the web, api, and ollama container logs; indexed documents are unchanged.",
+          );
+        }
+        const { done, value } = next;
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) consumeEvent(frame.trim());
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) consumeEvent(buffer.trim());
+      if (!completed) throw new Error("The model disconnected without completing its answer.");
       await loadConversations();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
@@ -521,7 +613,12 @@ export default function Home() {
       setDocumentError("Unsupported file type. Use PDF, DOCX, TXT, or MD.");
       return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      setDocumentError("File exceeds the 10 MB limit.");
+      return;
+    }
     setUploading(true);
+    setUploadNotice(null);
     setDocumentError(null);
     try {
       const formData = new FormData();
@@ -531,10 +628,23 @@ export default function Home() {
         body: formData,
       });
       if (!response.ok) throw await responseError(response, "Document upload failed.");
-      const data = (await response.json()) as UploadResponse;
+      let data = (await response.json()) as UploadResponse;
+      if (data.status === "already_indexed" && window.confirm(
+        "This file is already indexed. Rebuild its search index from the original document? " +
+        "This can recover content missed by older DOCX parsing. The existing index stays available until replacement succeeds."
+      )) {
+        const rebuild = await fetch(`${API_URL}/documents/upload?reindex=true`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!rebuild.ok) throw await responseError(rebuild, "Document reindexing failed.");
+        data = (await rebuild.json()) as UploadResponse;
+      }
       await loadDocuments();
       setDocumentError(null);
-      console.log(`Indexed ${data.filename} (${data.chunks} chunks)`);
+      setUploadNotice(data.status === "already_indexed"
+        ? `${data.filename} is already in your library.`
+        : `${data.filename} added · ${data.chunks} chunks indexed.`);
     } catch (requestError) {
       setDocumentError(requestError instanceof Error ? requestError.message : "Document upload failed.");
     } finally {
@@ -561,314 +671,302 @@ export default function Home() {
   }
 
   const activeConversation = conversations.find((item) => item.id === activeConversationId);
-  const visibleConversations = conversations.filter((item) => item.is_archived === showArchived);
+  const visibleConversations = conversations.filter((item) =>
+    item.is_archived === showArchived &&
+    item.title.toLowerCase().includes(conversationSearch.trim().toLowerCase()),
+  );
+  const visibleDocuments = documents.filter((item) =>
+    item.filename.toLowerCase().includes(documentSearch.trim().toLowerCase()) &&
+    (fileTypeFilter === "all" || item.filename.toLowerCase().endsWith("." + fileTypeFilter)),
+  );
+  const indexedChunks = documents.reduce((total, item) => total + item.chunks, 0);
+  const selectedDocument = documents.find((item) => item.document_id === selectedDocumentId);
   const evidenceSources = [...messages]
     .reverse()
     .find((message) => message.role === "assistant" && (message.sources?.length ?? 0) > 0)
     ?.sources ?? [];
   const conversationControlsDisabled = isLoading || messagesLoading || conversationActionId !== null;
 
+  async function copyText(content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopyNotice("Copied to clipboard");
+    } catch {
+      setCopyNotice("Could not access clipboard.");
+    }
+  }
+
   return (
-    <main className="app-shell">
-      <section className="workspace">
-        <header className="app-header">
-          <div>
-            <p className="eyebrow">LOCALRAG</p>
-            <h1>Ask your documents.</h1>
-            <p className="subtitle">Private, Local Document Retrieval Powered by Ollama and Qdrant.</p>
-          </div>
-          <div className="status-pill"><span className="status-dot" />Local</div>
+    <main className="lm-app">
+      <aside className="lm-sidebar" aria-label="Main navigation">
+        <div className="lm-brand"><span className="lm-brand-symbol" aria-hidden="true">m.</span><span>LocalMind</span></div>
+        <div className="lm-workspace-select"><span className="lm-workspace-avatar">L</span><div><strong>Personal Workspace</strong><small>Private Knowledge Base</small></div></div>
+        <div className="lm-nav-label">Workspace</div>
+        <nav className="lm-navigation">
+          <button type="button" className={activeView === "library" ? "lm-nav-link active" : "lm-nav-link"} aria-current={activeView === "library" ? "page" : undefined} onClick={() => setActiveView("library")}>
+            <span aria-hidden="true">▦</span> Documents <small>{documents.length}</small>
+          </button>
+          <button type="button" className={activeView === "research" ? "lm-nav-link active" : "lm-nav-link"} aria-current={activeView === "research" ? "page" : undefined} onClick={() => setActiveView("research")}>
+            <span aria-hidden="true">⌕</span> Research
+          </button>
+          <button type="button" className={activeView === "history" ? "lm-nav-link active" : "lm-nav-link"} aria-current={activeView === "history" ? "page" : undefined} onClick={() => setActiveView("history")}>
+            <span aria-hidden="true">▤</span> Conversations <small>{conversations.filter((item) => !item.is_archived).length}</small>
+          </button>
+        </nav>
+        <div className="lm-nav-label lm-quick-heading">Quick Actions</div>
+        <button type="button" className="lm-sidebar-action" onClick={openFilePicker} disabled={uploading}>+ Add Documents</button>
+        <button type="button" className="lm-sidebar-action muted" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Research Thread</button>
+        <div className="lm-sidebar-bottom"><span className="lm-local-indicator" /> Local Workspace <small>Your Files Stay In Your Environment</small></div>
+      </aside>
+
+      <section className="lm-main">
+        <header className="lm-topbar">
+          <div className="lm-breadcrumb">Workspace <span>/</span> <strong>{activeView === "library" ? "Documents" : activeView === "research" ? "Research" : "Conversations"}</strong></div>
+          <div className="lm-header-right"><span className="lm-topbar-privacy">● Private &amp; Local</span><button type="button" className="lm-signout" onClick={onLogout}>Sign Out</button></div>
         </header>
-
-        <div className="workspace-grid">
-          <aside className="sidebar-panel">
-            <section className="conversations-section">
-              <div className="conversation-panel-header">
-                <div>
-                  <h2>Conversations</h2>
-                  <p>{visibleConversations.length} {visibleConversations.length === 1 ? "chat" : "chats"}</p>
+        <div className="lm-content">
+          {activeView === "library" && (
+            <section className="lm-view lm-library" aria-label="Document library">
+              <div className="lm-page-header">
+                <div><p className="lm-overline">Your Workspace / File Management</p><h1>Documents</h1><p>Keep Your Knowledge Organized, Searchable, And Ready To Explore.</p></div>
+                <button className="lm-primary-button" type="button" onClick={openFilePicker} disabled={uploading}>{uploading ? "Indexing..." : "+ Upload Documents"}</button>
+              </div>
+              <div className="lm-stats">
+                <div><span>Files In Your Library</span><strong>{documents.length}</strong><small>Supported Documents</small></div>
+                <div><span>Searchable Passages</span><strong>{indexedChunks}</strong><small>Indexed Chunks</small></div>
+                <div><span>Research Conversations</span><strong>{conversations.filter((item) => !item.is_archived).length}</strong><small>Saved Threads</small></div>
+              </div>
+              <div className={"lm-upload-zone" + (dragActive ? " is-dragging" : "")} onDragOver={(event) => { event.preventDefault(); if (!uploading) setDragActive(true); }} onDragLeave={(event) => { event.preventDefault(); setDragActive(false); }} onDrop={(event) => { event.preventDefault(); setDragActive(false); if (!uploading && event.dataTransfer.files[0]) void uploadDocument(event.dataTransfer.files[0]); }}>
+                <div className="lm-upload-icon" aria-hidden="true">↑</div>
+                <div><strong>{dragActive ? "Release To Add Your Document" : "Drag And Drop Files Here"}</strong><p>PDF, Word, Markdown Or Text · Up To 10 MB Per File</p></div>
+                <button type="button" onClick={openFilePicker} disabled={uploading} className="lm-outline-button">{uploading ? "Indexing..." : "Browse Files"}</button>
+              </div>
+              {documentError && <div className="lm-error" role="alert">{documentError}</div>}
+              {uploadNotice && <div className="lm-notice" role="status">{uploadNotice}<button type="button" aria-label="Dismiss upload notice" onClick={() => setUploadNotice(null)}>×</button></div>}
+              <div className="lm-files-panel">
+                <div className="lm-section-header"><div><h2>Your Files</h2><p>{visibleDocuments.length} of {documents.length} documents</p></div><label className="lm-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search File Names" aria-label="Search File Names" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} /></label></div>
+                <div className="lm-filters" aria-label="Filter File Type">
+                  {["all", "pdf", "docx", "txt", "md"].map((type) => <button type="button" key={type} aria-pressed={fileTypeFilter === type} className={fileTypeFilter === type ? "active" : ""} onClick={() => setFileTypeFilter(type)}>{type === "all" ? "All Files" : type.toUpperCase()}</button>)}
                 </div>
-                <button
-                  type="button"
-                  className="new-conversation-button"
-                  onClick={() => void createConversation()}
-                  disabled={conversationControlsDisabled}
-                >
-                  + New chat
-                </button>
-              </div>
-
-              <div className="conversation-toolbar">
-                <span className="conversation-section-label">{showArchived ? "Archived chats" : "Recent chats"}</span>
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => {
-                    setShowArchived((current) => !current);
-                  }}
-                  disabled={conversationsLoading || conversationControlsDisabled}
-                >
-                  {showArchived ? "Show active" : "Archived"}
-                </button>
-              </div>
-
-              {conversationError && <div className="conversation-error" role="alert">{conversationError}</div>}
-
-              <div className="conversation-list" aria-label="Conversation history">
-                {conversationsLoading ? (
-                  <div className="conversation-empty">Loading conversations…</div>
-                ) : visibleConversations.length === 0 ? (
-                  <div className="conversation-empty">
-                    <strong>{showArchived ? "No archived chats" : "No conversations yet"}</strong>
-                    <span>{showArchived ? "Archived chats will appear here." : "Start a new chat to keep your questions and answers."}</span>
-                  </div>
-                ) : visibleConversations.map((conversation) => (
-                  <article
-                    key={conversation.id}
-                    className={`conversation-item${activeConversationId === conversation.id ? " conversation-item-active" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className="conversation-select"
-                      onClick={() => void openConversation(conversation.id)}
-                      disabled={conversationControlsDisabled}
-                      aria-current={activeConversationId === conversation.id ? "page" : undefined}
-                    >
-                      <span className="conversation-title">{conversation.title}</span>
-                      <span className="conversation-meta">
-                        {conversation.message_count} {conversation.message_count === 1 ? "message" : "messages"}
-                        <span aria-hidden="true"> · </span>
-                        {new Date(conversation.updated_at).toLocaleDateString()}
-                      </span>
-                    </button>
-                    <div className="conversation-actions">
-                      {!conversation.is_archived && (
-                        <button
-                          type="button"
-                          className="conversation-action"
-                          title="Rename conversation"
-                          aria-label={`Rename ${conversation.title}`}
-                          disabled={conversationControlsDisabled || conversationActionId === conversation.id}
-                          onClick={() => void renameConversation(conversation)}
-                        >Edit</button>
-                      )}
-                      <button
-                        type="button"
-                        className="conversation-action"
-                        title={conversation.is_archived ? "Restore conversation" : "Archive conversation"}
-                        aria-label={`${conversation.is_archived ? "Restore" : "Archive"} ${conversation.title}`}
-                        disabled={conversationControlsDisabled || conversationActionId === conversation.id}
-                        onClick={() => void toggleArchive(conversation)}
-                      >{conversation.is_archived ? "Restore" : "Archive"}</button>
-                      <button
-                        type="button"
-                        className="conversation-action conversation-action-danger"
-                        title="Delete conversation"
-                        aria-label={`Delete ${conversation.title}`}
-                        disabled={conversationControlsDisabled || conversationActionId === conversation.id}
-                        onClick={() => void deleteConversation(conversation)}
-                      >Delete</button>
-                    </div>
-                  </article>
-                ))}
-                {!conversationsLoading && conversationNextCursor && (
-                  <button
-                    type="button"
-                    className="load-more-conversations"
-                    onClick={() => void loadMoreConversations()}
-                    disabled={loadingMoreConversations || conversationControlsDisabled}
-                  >
-                    {loadingMoreConversations ? "Loading…" : "Load older conversations"}
-                  </button>
-                )}
+                <div className="lm-file-table" role="table" aria-label="Indexed Documents">
+                  <div className="lm-file-row lm-file-thead" role="row"><span role="columnheader">Name</span><span role="columnheader">Type</span><span role="columnheader">Indexed Content</span><span role="columnheader">Actions</span></div>
+                  {documentsLoading ? <div className="lm-table-empty" role="status">Loading Your Library...</div> :
+                   visibleDocuments.length === 0 ? <div className="lm-table-empty"><strong>{documents.length === 0 ? "Your Library Is Empty" : "No Matching Files"}</strong><p>{documents.length === 0 ? "Add A Document Above To Start Exploring." : "Try A Different Search Or File Type."}</p></div> :
+                   visibleDocuments.map((document) => (
+                     <div className="lm-file-row" role="row" key={document.document_id}>
+                       <div className="lm-file-name" role="cell"><span className="lm-file-icon">{document.filename.split(".").pop()?.toUpperCase().slice(0, 4) || "FILE"}</span><div><strong title={document.filename}>{document.filename}</strong><small>Ready For Questions</small></div></div>
+                       <span className="lm-type" role="cell">{document.filename.split(".").pop()?.toUpperCase() || "FILE"}</span>
+                       <span className="lm-chunks" role="cell">{document.chunks} passages</span>
+                       <div className="lm-file-actions" role="cell">
+                         <button type="button" onClick={() => { setSelectedDocumentId(document.document_id); setActiveView("research"); setQuestion(""); }} aria-label={"Ask about " + document.filename}>Ask Questions ↗</button>
+                         <button type="button" className="lm-delete" onClick={() => void deleteDocument(document.document_id)} disabled={deletingDocumentId === document.document_id} aria-label={"Delete " + document.filename}>{deletingDocumentId === document.document_id ? "..." : "Delete"}</button>
+                       </div>
+                     </div>
+                   ))}
+                </div>
               </div>
             </section>
+          )}
 
-            <aside className="documents-panel">
-              <div className="panel-header">
-                <div>
-                  <h2>Documents</h2>
-                  <p>{documents.length} {documents.length === 1 ? "document" : "documents"}</p>
-                </div>
-                <button type="button" className="upload-button" onClick={openFilePicker} disabled={uploading}>
-                  {uploading ? "Indexing…" : "+ Upload"}
-                </button>
-                <input ref={fileInputRef} type="file" className="hidden-file-input" accept=".pdf,.docx,.txt,.md" onChange={handleFileChange} />
-              </div>
-              {documentError && <div className="document-error" role="alert">{documentError}</div>}
-              <div className="document-list">
-                {documentsLoading ? (
-                  <div className="documents-empty">Loading documents…</div>
-                ) : documents.length === 0 ? (
-                  <div className="documents-empty">
-                    <div className="documents-empty-icon">+</div>
-                    <strong>No documents yet</strong>
-                    <span>Upload a document to start asking questions.</span>
-                  </div>
-                ) : documents.map((document) => (
-                  <article className="document-card" key={document.document_id}>
-                    <div className="document-icon">DOC</div>
-                    <div className="document-info">
-                      <span className="document-name">{document.filename}</span>
-                      <span className="document-meta">{document.chunks} {document.chunks === 1 ? "chunk" : "chunks"}</span>
+          {activeView === "history" && (
+            <section className="lm-view lm-history" aria-label="Conversation History">
+              <div className="lm-page-header"><div><p className="lm-overline">Your Research Archive</p><h1>Conversations</h1><p>Find, Continue And Organize Your Saved Research Threads.</p></div><button type="button" className="lm-primary-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Conversation</button></div>
+              <div className="lm-history-panel">
+                <div className="lm-section-header"><div><h2>{showArchived ? "Archived Conversations" : "Recent Conversations"}</h2><p>{visibleConversations.length} threads</p></div><div className="lm-history-tools"><label className="lm-search"><span aria-hidden="true">⌕</span><input type="search" aria-label="Find A Conversation" placeholder="Search Conversations" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} /></label><button type="button" className="lm-outline-button" onClick={() => setShowArchived((v) => !v)}>{showArchived ? "Show Active" : "Archived"}</button></div></div>
+                {conversationError && <div className="lm-error" role="alert">{conversationError}</div>}
+                {conversationsLoading ? <div className="lm-table-empty">Loading Conversations...</div> : visibleConversations.length === 0 ? <div className="lm-table-empty"><strong>No Matching Conversations</strong><p>Your Conversations Will Appear Here.</p></div> : visibleConversations.map((conversation) => (
+                  <article className="lm-thread" key={conversation.id}>
+                    <button type="button" className="lm-thread-open" disabled={conversationControlsDisabled} onClick={() => void openConversation(conversation.id)}>
+                      <span className="lm-thread-icon">▤</span><span><strong>{conversation.title}</strong><small>{conversation.message_count} messages · {new Date(conversation.updated_at).toLocaleDateString()}</small></span><span className="lm-thread-arrow">↗</span>
+                    </button>
+                    <div className="lm-thread-actions">
+                      {!conversation.is_archived && <button type="button" disabled={conversationControlsDisabled} onClick={() => void renameConversation(conversation)}>Rename</button>}
+                      <button type="button" disabled={conversationControlsDisabled} onClick={() => void toggleArchive(conversation)}>{conversation.is_archived ? "Restore" : "Archive"}</button>
+                      <button type="button" className="lm-delete" disabled={conversationControlsDisabled} onClick={() => void deleteConversation(conversation)}>Delete</button>
                     </div>
-                    <button
-                      type="button"
-                      className="delete-button"
-                      aria-label={`Delete ${document.filename}`}
-                      title={`Delete ${document.filename}`}
-                      disabled={deletingDocumentId === document.document_id}
-                      onClick={() => void deleteDocument(document.document_id)}
-                    >{deletingDocumentId === document.document_id ? "…" : "×"}</button>
                   </article>
                 ))}
+                {!conversationsLoading && conversationNextCursor && <button className="lm-load-more" type="button" onClick={() => void loadMoreConversations()} disabled={loadingMoreConversations || conversationControlsDisabled}>{loadingMoreConversations ? "Loading..." : "Load More Conversations"}</button>}
               </div>
-              <div className="upload-hint">Supported: PDF, DOCX, TXT, MD</div>
-            </aside>
-          </aside>
+            </section>
+          )}
 
-          <section className="chat-panel">
-            <div className="chat-panel-heading">
-              <div>
-                <span className="chat-context-label">CURRENT CONVERSATION</span>
-                <h2>{activeConversation?.title ?? "New conversation"}</h2>
+          {activeView === "research" && (
+            <section className="lm-view lm-research" aria-label="Document Research">
+              <div className="lm-page-header lm-research-header"><div><p className="lm-overline">Ask &amp; Verify / Research</p><h1>Research</h1><p>Explore Your Material And Inspect The Passages Behind Each Answer.</p></div><button type="button" className="lm-outline-button" disabled={conversationControlsDisabled} onClick={() => void createConversation()}>+ New Thread</button></div>
+              <div className="lm-scope-toolbar"><label htmlFor="lm-document-scope">Source Collection</label><select id="lm-document-scope" value={selectedDocumentId ?? ""} onChange={(event) => setSelectedDocumentId(event.target.value || null)}><option value="">All Documents</option>{documents.map((doc) => <option value={doc.document_id} key={doc.document_id}>{doc.filename}</option>)}</select><span>{selectedDocument ? "Questions Are Limited To This Document" : "Search Across Your Indexed Library"}</span></div>
+              <div className="lm-research-grid">
+                <section className="lm-answer-panel" aria-label="Question And Answer">
+                  <div className="lm-answer-header"><div><small>Active Thread</small><h2>{activeConversation?.title ?? "New Research"}</h2></div><span>{messages.length} messages</span></div>
+                  {messagesLoading ? <div className="lm-answer-empty" role="status">Opening Conversation...</div> :
+                    messages.length === 0 ? (
+                      <div className="lm-answer-empty"><span className="lm-answer-empty-icon" aria-hidden="true">⌕</span><h2>Start With A Question.</h2><p>Summarize A File, Explore A Concept Or Compare Two Ideas. The Source Passages Appear Alongside Each Answer.</p><div className="lm-starter-prompts"><button type="button" onClick={() => setQuestion("Summarize the document.")}>Summarize The Document ↗</button><button type="button" onClick={() => setQuestion("What are the key topics covered?")}>Find Key Topics ↗</button></div></div>
+                    ) : <div className="lm-answer-messages">{messages.map((message) => <article className={"lm-answer-message " + (message.role === "user" ? "is-user" : "is-assistant")} key={message.id}><div className="lm-message-author">{message.role === "user" ? "YOU ASKED" : "LOCALMIND"}</div><div className="lm-message-text">{message.status === "failed" && !message.content ? "This Answer Could Not Be Generated." : message.content}</div>{message.role === "assistant" && message.status === "complete" && <button type="button" className="lm-copy" onClick={() => void copyText(message.content)}>Copy Answer</button>}{message.status === "failed" && <span className="lm-message-failed">Generation Failed</span>}</article>)}{isLoading && <div className="lm-thinking" role="status">Researching Your Documents...</div>}<div ref={messagesEndRef} aria-hidden="true" /></div>}
+                  {error && <div className="lm-error" role="alert">{error}</div>}
+                  <form className="lm-composer" onSubmit={sendMessage}><textarea aria-label="Ask A Question About Your Documents" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask A Question About Your Documents..." rows={2} disabled={isLoading || messagesLoading} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (question.trim() && !isLoading && !messagesLoading) event.currentTarget.form?.requestSubmit(); } }} /><div><small>Enter To Ask · Shift + Enter For A New Line</small><button className="lm-primary-button" type="submit" disabled={!question.trim() || isLoading || messagesLoading}>{isLoading ? "Working..." : "Ask Question ↗"}</button></div></form>
+                  {copyNotice && <div className="lm-notice" role="status">{copyNotice}<button type="button" onClick={() => setCopyNotice(null)}>×</button></div>}
+                </section>
+                <aside className="lm-evidence-panel" aria-label="Source Evidence">
+                  <div className="lm-evidence-header"><div><small>References</small><h2>Source Evidence</h2><p>{evidenceSources.length} Passages From The Latest Answer</p></div><button type="button" aria-label={evidencePanelCollapsed ? "Expand Sources" : "Collapse Sources"} aria-expanded={!evidencePanelCollapsed} onClick={() => setEvidencePanelCollapsed((v) => !v)}>{evidencePanelCollapsed ? "+" : "−"}</button></div>
+                  {!evidencePanelCollapsed && <div className="lm-evidence-body">
+                    {sourcePreviewLoading && <p role="status">Loading Source Passage...</p>}
+                    {sourcePreviewError && <p role="alert" className="lm-error">{sourcePreviewError}</p>}
+                    {sourcePreview && <section className="lm-source-preview"><div><strong>{sourcePreview.filename}</strong><button type="button" onClick={() => setSourcePreview(null)}>Close</button></div><small>Passage {sourcePreview.chunk_id}</small><p>{sourcePreview.text}</p><button type="button" className="lm-outline-button" onClick={() => void copyText(sourcePreview.text)}>Copy Passage</button></section>}
+                    {evidenceSources.length === 0 ? <div className="lm-evidence-empty"><span aria-hidden="true">▤</span><strong>Evidence, Not Guesswork.</strong><p>Retrieved Source Passages Will Appear Here After Your Question.</p></div> :
+                    evidenceSources.map((source, index) => <article className="lm-evidence-item" key={source.document_id + "-" + source.chunk_id + "-" + index}><span className="lm-citation">{source.citation}</span><div><strong title={source.filename}>{source.filename}</strong><small>Passage {source.chunk_id}</small><button type="button" onClick={() => void previewSource(source)}>Read Original Passage ↗</button></div></article>)}
+                  </div>}
+                </aside>
               </div>
-              {activeConversation && <span className="chat-message-count">{messages.length} {messages.length === 1 ? "message" : "messages"}</span>}
-            </div>
-
-            {messagesLoading ? (
-              <div className="conversation-loading-state" role="status">Restoring conversation history…</div>
-            ) : messages.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">⌕</div>
-                <h2>Ask something about your documents</h2>
-                <p>LocalRAG retrieves relevant document chunks and uses them as context for the answer. Your questions and answers are saved in the selected conversation.</p>
-                <div className="suggestions">
-                  <button type="button" onClick={() => setQuestion("What does LocalRAG use for vector storage?")}>What does LocalRAG use for vector storage?</button>
-                  <button type="button" onClick={() => setQuestion("How does LocalRAG retrieve relevant documents?")}>How does document retrieval work?</button>
-                </div>
-              </div>
-            ) : (
-              <div className="messages">
-                {messages.map((message) => (
-                  <article
-                    key={message.id}
-                    className={`message ${message.role === "user" ? "message-user" : "message-assistant"}`}
-                  >
-                    <div className="message-label">{message.role === "user" ? "You" : "LocalRAG"}</div>
-                    <div className="message-content">
-                      {message.status === "failed" && !message.content
-                        ? "This response failed to generate. You can ask another question to continue this conversation."
-                        : message.content}
-                    </div>
-                    {message.role === "assistant" && message.status === "pending" && (
-                      <div className="message-status" role="status">Response pending…</div>
-                    )}
-                    {message.role === "assistant" && message.status === "failed" && (
-                      <div className="message-status message-status-error" role="note">Generation failed</div>
-                    )}
-                    {message.role === "assistant" && message.sources && message.sources.length > 0 && (
-                      <div className="sources">
-                        <div className="sources-title">Sources</div>
-                        <div className="source-list">
-                          {message.sources.map((source, index) => (
-                            <div className="source-card" key={`${source.document_id}-${source.chunk_id}-${index}`}>
-                              <div className="source-icon">DOC</div>
-                              <div className="source-info">
-                                <span className="source-name">{source.filename}</span>
-                                <span className="source-meta">{source.citation} · Chunk {source.chunk_id} · Score {source.score.toFixed(2)}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {message.role === "assistant" && message.status !== "failed" && (!message.sources || message.sources.length === 0) && (
-                      <div className="source-status" role="note">
-                        <span className="source-status-icon" aria-hidden="true">i</span>
-                        <div>
-                          <strong>No citations returned</strong>
-                          <p>This response has no linked document evidence. Check the uploaded documents before relying on it.</p>
-                        </div>
-                      </div>
-                    )}
-                  </article>
-                ))}
-                {isLoading && (
-                  <article className="message message-assistant">
-                    <div className="message-label">LocalRAG</div>
-                    <div className="typing-indicator" role="status" aria-label="LocalRAG is generating a response"><span /><span /><span /></div>
-                  </article>
-                )}
-                <div ref={messagesEndRef} aria-hidden="true" />
-              </div>
-            )}
-
-            {error && <div className="error-banner" role="alert"><strong>Request failed.</strong><span>{error}</span></div>}
-
-            <form className="composer" onSubmit={sendMessage}>
-              <textarea
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder="Ask your documents…"
-                rows={1}
-                disabled={isLoading || messagesLoading}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    if (question.trim() && !isLoading && !messagesLoading) event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-              />
-              <button type="submit" className="send-button" disabled={!question.trim() || isLoading || messagesLoading}>
-                {isLoading ? "…" : "Send"}
-              </button>
-            </form>
-            <p className="composer-hint">Press Enter to send · Shift + Enter for a new line</p>
-          </section>
-
-          <aside className={`evidence-panel${evidencePanelCollapsed ? " evidence-panel-collapsed" : ""}`} aria-label="Retrieved evidence">
-            <div className="evidence-panel-header">
-              <div>
-                <span className="chat-context-label">CURRENT EVIDENCE</span>
-                <h2>Retrieved sources</h2>
-                <p>{evidenceSources.length} {evidenceSources.length === 1 ? "source" : "sources"} from the latest answer</p>
-              </div>
-              <button
-                type="button"
-                className="evidence-toggle"
-                onClick={() => setEvidencePanelCollapsed((current) => !current)}
-                aria-expanded={!evidencePanelCollapsed}
-                aria-label={evidencePanelCollapsed ? "Expand retrieved sources panel" : "Collapse retrieved sources panel"}
-                title={evidencePanelCollapsed ? "Expand sources" : "Collapse sources"}
-              >
-                {evidencePanelCollapsed ? "›" : "‹"}
-              </button>
-            </div>
-            {!evidencePanelCollapsed && (
-              <div className="evidence-list">
-                {evidenceSources.length === 0 ? (
-                  <div className="evidence-empty">
-                    <span className="evidence-empty-mark">↗</span>
-                    <strong>No retrieved sources yet</strong>
-                    <p>Sources returned with an answer will appear here.</p>
-                  </div>
-                ) : evidenceSources.map((source, index) => (
-                  <article className="evidence-card" key={`${source.document_id}-${source.chunk_id}-${index}`}>
-                    <div className="evidence-card-top">
-                      <span className="evidence-document-mark">PDF</span>
-                      <span className="evidence-score">{source.score.toFixed(2)}</span>
-                    </div>
-                    <strong className="evidence-filename" title={source.filename}>{source.filename}</strong>
-                    <p className="evidence-citation">{source.citation}</p>
-                    <div className="evidence-card-footer">Chunk {source.chunk_id}</div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </aside>
+            </section>
+          )}
         </div>
+        <footer className="lm-footer"><span>LocalMind · Private Knowledge Workspace</span><span>Documents First. Answers With Context.</span></footer>
+        <input ref={fileInputRef} type="file" className="lm-hidden-file" accept=".pdf,.docx,.txt,.md" onChange={handleFileChange} />
       </section>
     </main>
   );
+}
+
+export default function Home() {
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/session", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((result: { authenticated?: boolean }) => {
+        if (active) setAuthenticated(result.authenticated === true);
+      })
+      .catch(() => { if (active) setAuthenticated(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function signIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoggingIn(true);
+    setLoginError(null);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!response.ok) throw await responseError(response, "Sign in failed.");
+      setPassword("");
+      setAuthenticated(true);
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Sign in failed.");
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setAuthenticated(false);
+  }
+
+  if (authenticated === null) return (
+    <main className="auth-loading" role="status" aria-live="polite">
+      <span className="brand-mark" aria-hidden="true">M<span className="brand-mark-detail">/</span></span> Opening LocalMind…
+    </main>
+  );
+  if (!authenticated) return (
+    <main className="auth-shell auth-reading-desk">
+      <div className="auth-page-inner">
+        <header className="auth-header">
+          <div className="brand-lockup">
+            <span className="brand-mark" aria-hidden="true">M<span className="brand-mark-detail">/</span></span>
+            <span>LocalMind<span className="brand-mark-subtle"> / The Reading Desk</span></span>
+          </div>
+          <span className="auth-header-label"><span className="status-dot" /> PRIVATE. LOCAL. YOURS.</span>
+        </header>
+
+        <div className="auth-layout">
+          <section className="auth-story" aria-label="About LocalMind">
+            <div className="auth-editorial-header">
+              <p className="auth-kicker"><span>01 /</span> A HOME FOR YOUR KNOWLEDGE</p>
+              <h1>Less Searching.<br /><em>More Finding.</em></h1>
+              <p className="auth-story-description">
+                A Calm Place To Read Across Your Documents, Ask Better Questions
+                And Follow Every Answer Back To Its Source.
+              </p>
+            </div>
+            <div className="auth-document-preview" aria-label="Illustration of the LocalMind document reading workflow">
+              <div className="auth-preview-head">
+                <span>The Reading Desk</span>
+                <span>Anatomy Of An Answer / 01</span>
+              </div>
+              <div className="auth-preview-paper">
+                <div className="auth-preview-paper-heading">
+                  <span className="auth-preview-file-icon" aria-hidden="true">D</span>
+                  <div><span>Your Library</span><strong>Notes On The Things That Matter.</strong></div>
+                  <span className="auth-preview-page-number">01—03</span>
+                </div>
+                <p className="auth-preview-label">A Question Worth Asking</p>
+                <h2>What Does The Document<br />Actually Say?</h2>
+                <div className="auth-preview-rules" aria-hidden="true">
+                  <span /><span /><span />
+                </div>
+                <div className="auth-preview-quote">
+                  <span className="auth-preview-quote-mark" aria-hidden="true">“</span>
+                  <p>Answers Grounded In Your Documents, With The Passages Beside Them.</p>
+                  <span className="auth-preview-citation">Source / 001</span>
+                </div>
+              </div>
+              <div className="auth-preview-bottom"><span>Read</span><span>Question</span><span>Trace</span></div>
+            </div>
+            <div className="auth-steps" aria-label="How LocalMind Works">
+              <div><span>01</span><div><strong>Collect</strong><p>PDF, Word, Markdown And Plain Text.</p></div></div>
+              <div><span>02</span><div><strong>Explore</strong><p>Ask Questions And Connect Ideas.</p></div></div>
+              <div><span>03</span><div><strong>Verify</strong><p>Inspect The Original Passages.</p></div></div>
+            </div>
+          </section>
+
+          <section className="auth-signin-zone" aria-labelledby="auth-title">
+            <div className="auth-signin-topline"><span>Your Private Workspace</span><span>Access / 01</span></div>
+            <div className="auth-card">
+              <div className="auth-card-icon" aria-hidden="true">M<span>/</span></div>
+              <p className="eyebrow">Welcome Back</p>
+              <h2 id="auth-title">Make Yourself<br /><em>At Home.</em></h2>
+              <p className="auth-card-description">
+                Sign In To Continue Your Research, Documents And Conversations.
+              </p>
+              <form onSubmit={(event) => void signIn(event)}>
+                <label htmlFor="localmind-password">Administrator Password</label>
+                <input
+                  id="localmind-password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Enter Your Password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  aria-invalid={Boolean(loginError)}
+                  aria-describedby={loginError ? "auth-error" : undefined}
+                />
+                {loginError && <div id="auth-error" className="auth-error" role="alert">{loginError}</div>}
+                <button type="submit" className="auth-submit" disabled={loggingIn || !password.trim()}>
+                  <span>{loggingIn ? "Verifying Access…" : "Open Your Desk"}</span><span aria-hidden="true">↗</span>
+                </button>
+              </form>
+              <div className="auth-card-foot">
+                <span className="auth-privacy-mark" aria-hidden="true">●</span>
+                Self-Hosted. Your Files Stay In Your Environment.
+              </div>
+            </div>
+            <p className="auth-signin-note">A Personal Space For Thoughtful Work.</p>
+          </section>
+        </div>
+
+        <footer className="auth-footer">
+          <span>LocalMind / The Reading Desk</span>
+          <span>Documents In. Clarity Out.</span>
+        </footer>
+      </div>
+    </main>
+  );
+  return <Workspace onLogout={() => void signOut()} />;
 }

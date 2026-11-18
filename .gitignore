@@ -32,3 +32,5 @@ data/ollama/*
 # OS
 .DS_Store
 Thumbs.db
+# Private database and document backups
+backups/

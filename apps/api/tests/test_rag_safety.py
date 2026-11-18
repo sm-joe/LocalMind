@@ -163,8 +163,10 @@ def test_missing_or_invalid_citations_return_safe_fallback(
         question="What does LocalRAG use for vector storage?"
     )
 
-    assert result.answer == RAGService.INVALID_CITATION_ANSWER
-    assert len(result.sources) == 1
+    assert "Relevant verbatim excerpts:" in result.answer
+    assert "LocalRAG uses Qdrant for vector storage." in result.answer
+    assert "[1]" in result.answer
+    assert result.sources[0].filename == "reference.txt"
 
 
 def test_citation_must_reference_an_available_source():

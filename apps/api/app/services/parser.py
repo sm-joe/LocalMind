@@ -50,7 +50,9 @@ def parse_document(
             f"Unsupported file type: {extension}"
         )
 
-    normalized_text = _normalize_text(text)
+    normalized_text = _normalize_text(
+        text, preserve_paragraphs=(extension == ".docx")
+    )
 
     if not normalized_text:
         raise ValueError(
@@ -99,6 +101,8 @@ def _parse_pdf(path: Path) -> str:
 
 def _parse_docx(path: Path) -> str:
     from docx import Document
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
 
     try:
         document = Document(path)
@@ -108,13 +112,36 @@ def _parse_docx(path: Path) -> str:
                 "DOCX document contains too many paragraphs."
             )
 
-        paragraphs = [
-            paragraph.text
-            for paragraph in document.paragraphs
-            if paragraph.text.strip()
-        ]
+        # document.paragraphs silently omits all content inside Word tables.
+        # Read both paragraphs and tables in their true body order, including
+        # tables containing interview questions and their answers.
+        sections: list[str] = []
+        for block in document.iter_inner_content():
+            if isinstance(block, Paragraph):
+                if block.text.strip():
+                    sections.append(block.text)
+            elif isinstance(block, Table):
+                for row in block.rows:
+                    # Preserve paired question/answer columns and avoid
+                    # emitting duplicate text for horizontally merged cells.
+                    cells: list[str] = []
+                    seen_cells: set[int] = set()
+                    for cell in row.cells:
+                        cell_identity = id(cell._tc)
+                        if cell_identity in seen_cells:
+                            continue
+                        seen_cells.add(cell_identity)
+                        text = " ".join(
+                            paragraph.text.strip()
+                            for paragraph in cell.paragraphs
+                            if paragraph.text.strip()
+                        )
+                        if text:
+                            cells.append(text)
+                    if cells:
+                        sections.append(" | ".join(cells))
 
-        return "\n\n".join(paragraphs)
+        return "\n\n".join(sections)
 
     except ValueError:
         raise
@@ -123,7 +150,6 @@ def _parse_docx(path: Path) -> str:
         raise ValueError(
             "The DOCX document could not be parsed."
         ) from exc
-
 
 def _parse_text(path: Path) -> str:
     try:
@@ -138,16 +164,27 @@ def _parse_text(path: Path) -> str:
         ) from exc
 
 
-def _normalize_text(text: str) -> str:
+def _normalize_text(
+    text: str, preserve_paragraphs: bool = False
+) -> str:
     lines = [
         line.strip()
         for line in text.splitlines()
     ]
+    if not preserve_paragraphs:
+        return "\n".join(line for line in lines if line).strip()
 
-    normalized_text = "\n".join(
-        line
-        for line in lines
-        if line
-    ).strip()
-
-    return normalized_text
+    # The chunker recognizes paragraph boundaries only when they are
+    # separated by a blank line. Do not flatten DOCX questions and answers
+    # into one giant paragraph before splitting them into retrieval chunks.
+    normalized: list[str] = []
+    blank = False
+    for line in lines:
+        if not line:
+            blank = bool(normalized)
+        else:
+            if blank:
+                normalized.append("")
+                blank = False
+            normalized.append(line)
+    return "\n".join(normalized).strip()

@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import uuid
 from pathlib import Path
 
@@ -6,8 +7,11 @@ from qdrant_client.http import models
 
 from app.services.chunker import chunk_text
 from app.services.embeddings import EmbeddingService
+from app.services.document_registry import DocumentIndexRegistry, DocumentIndexInProgress
 from app.services.parser import parse_document
 from app.services.vector_store import VectorStore
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionResult:
@@ -31,17 +35,88 @@ class IngestionService:
         vector_store: VectorStore,
         chunk_size: int = 1000,
         chunk_overlap: int = 150,
+        registry: DocumentIndexRegistry | None = None,
     ) -> None:
         self.embedding_service = embedding_service
         self.vector_store = vector_store
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.registry = registry
 
     def ingest(
         self,
         file_path: str | Path,
         content_type: str,
         original_filename: str | None = None,
+        force_reindex: bool = False,
+    ) -> IngestionResult:
+        path = Path(file_path)
+        if self.registry is None:
+            return self._ingest_document(path, content_type, original_filename)
+
+        if not path.is_file():
+            raise ValueError("Document file does not exist.")
+        document_hash = self._calculate_hash(path)
+        filename = original_filename or path.name
+        claim = (
+            self.registry.acquire(document_hash, filename, content_type, force=True)
+            if force_reindex else
+            self.registry.acquire(document_hash, filename, content_type)
+        )
+        if claim.status == "ready":
+            return IngestionResult(
+                document_id=claim.document_id,
+                filename=claim.filename,
+                chunks=0,
+                already_indexed=True,
+            )
+        try:
+            if claim.previous_document_id is not None and not force_reindex:
+                # A parse/embedding failure may predate collection creation.
+                collections = self.vector_store.client.get_collections()
+                if any(
+                    item.name == self.vector_store.collection_name
+                    for item in collections.collections
+                ):
+                    self.vector_store.delete_document(
+                        claim.previous_document_id
+                    )
+            result = self._ingest_document(
+                path, content_type, original_filename,
+                document_id=claim.document_id,
+                skip_existing_hash=force_reindex,
+            )
+            self.registry.complete(
+                claim, result.document_id, result.filename, result.chunks
+            )
+            if force_reindex and claim.previous_document_id:
+                # The new index is ready before retiring the old one.
+                # A cleanup failure leaves extra older chunks but must not
+                # mark the successful new index as failed.
+                try:
+                    self.vector_store.delete_document(claim.previous_document_id)
+                except Exception:
+                    logger.exception(
+                        "Reindex succeeded; old vector cleanup needs attention."
+                    )
+            return result
+        except Exception:
+            try:
+                self.registry.fail(claim)
+            except Exception:
+                logger.exception(
+                    "Could not persist failed document indexing for hash=%s",
+                    document_hash,
+                )
+            raise
+
+    def _ingest_document(
+        self,
+        file_path: str | Path,
+        content_type: str,
+        original_filename: str | None = None,
+        document_id: str | None = None,
+        skip_existing_hash: bool = False,
     ) -> IngestionResult:
         path = Path(file_path)
 
@@ -53,9 +128,8 @@ class IngestionService:
         document_hash = self._calculate_hash(path)
 
         existing_document = (
-            self.vector_store.find_document_by_hash(
-                document_hash
-            )
+            None if skip_existing_hash
+            else self.vector_store.find_document_by_hash(document_hash)
         )
 
         filename = (
@@ -134,7 +208,7 @@ class IngestionService:
             vector_size=vector_size
         )
 
-        document_id = str(uuid.uuid4())
+        document_id = document_id or str(uuid.uuid4())
 
         points: list[models.PointStruct] = []
 
@@ -160,7 +234,20 @@ class IngestionService:
                 )
             )
 
-        self.vector_store.upsert(points)
+        # A transport/server error may occur after Qdrant has persisted some
+        # points. Never leave a partially indexed document that could be
+        # mistaken for a successfully completed duplicate on the next upload.
+        try:
+            self.vector_store.upsert(points)
+        except Exception:
+            try:
+                self.vector_store.delete_document(document_id)
+            except Exception:
+                logger.exception(
+                    "Could not roll back partial indexing for document_id=%s",
+                    document_id,
+                )
+            raise
 
         return IngestionResult(
             document_id=document_id,

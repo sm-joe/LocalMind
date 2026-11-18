@@ -1,4 +1,4 @@
-# LocalRAG
+# LocalMind
 
 <p align="center">
   <strong>Private, portable Retrieval-Augmented Generation for your own documents.</strong><br>
@@ -24,19 +24,22 @@
 
 ---
 
-## UI preview
+## Current Workspace
 
-The preview below illustrates the approved dark Slate direction: a three-panel workspace, conversation and document management on the left, the active RAG conversation in the center, and retrieved evidence/citations on the right.
+LocalMind uses a document-first workspace with separate **Documents**, **Research**, and **Conversations** views, plus a dedicated sign-in screen. The previous dark Slate illustration was a concept mockup, not a screenshot of the current interface; it is intentionally not shown as the live UI.
 
-> **Illustrative UI preview:** this is a visual mockup, not a screenshot captured from a running LocalRAG instance. Replace it with a fresh application screenshot when capturing the frozen release.
+- **Documents:** upload PDF, DOCX, TXT, and Markdown; search and filter indexed documents, review chunk counts, delete files, and open document-scoped research.
+- **Research:** select a document or all documents; ask questions, request summaries and comparisons, stream answers, and inspect the original cited passages.
+- **Conversations:** search and resume persisted conversations; rename, archive, restore, or delete threads.
+- **Sign In:** a local administrator password establishes a signed HttpOnly web session; the browser uses the Next.js backend proxy rather than exposing the backend API key.
 
-![LocalRAG dark Slate UI preview](docs/images/localrag-ui-preview.png)
+The application is single-user and locally deployed; signing in does **not** make it a multi-tenant access-control system.
 
 ---
 
-## What is LocalRAG?
+## What is LocalMind?
 
-**LocalRAG** is a Docker-first local RAG chatbot for learning, experimenting, and working with private documents without sending document content to a hosted LLM provider.
+**LocalMind** is a Docker-first local RAG chatbot for learning, experimenting, and working with private documents without sending document content to a hosted LLM provider.
 
 It combines:
 
@@ -52,13 +55,13 @@ The goal is deliberately practical: keep the stack understandable, portable, tes
 
 ---
 
-## Why LocalRAG?
+## Why LocalMind?
 
 A local RAG application is easy to make *work*. Making it predictable, grounded, and safe is the more interesting engineering problem.
 
-LocalRAG focuses on those boundaries:
+LocalMind focuses on those boundaries:
 
-| Area | LocalRAG approach |
+| Area | LocalMind approach |
 |---|---|
 | Runtime | Docker-first |
 | LLM | Local Ollama model |
@@ -91,7 +94,7 @@ The application now includes PostgreSQL-backed conversation persistence alongsid
 - Chat requests can use `conversation_id` and an `Idempotency-Key` to make retries safe.
 - Qdrant remains dedicated to document chunks, embeddings, and similarity retrieval; it is not the conversation database.
 
-The current deployment remains a local, single-user application. Conversation ownership metadata does not provide authentication or authorization.
+The current deployment remains a local, single-user application. The web sign-in uses a signed session and server-side API key; conversation ownership metadata is not multi-user authorization.
 
 ### Local by design
 
@@ -235,7 +238,7 @@ Grounded answer + citations
 
 ## Docker network model
 
-LocalRAG intentionally separates externally reachable application services, internal infrastructure, and temporary model provisioning.
+LocalMind intentionally separates externally reachable application services, internal infrastructure, and temporary model provisioning.
 
 ```text
 Host
@@ -314,26 +317,32 @@ More memory and CPU generally improve local LLM performance.
 
 ---
 
+Run the commands in the following sections in **Bash** on Linux, macOS, or WSL, from the repository root. Docker Compose v2 is required.
+
 ## 1. Clone
 
-```powershell
-git clone https://github.com/sm-joe/localrag.git
-cd localrag
+```bash
+git clone https://github.com/sm-joe/LocalMind.git
+cd LocalMind
 ```
+
+### Existing Installations And Docker Volumes
+
+The GitHub repository is now **sm-joe/LocalMind**. For an existing checkout, update its remote using `git remote set-url origin https://github.com/sm-joe/LocalMind.git`. The default Compose project identity remains `localrag`, preserving the existing named-volume namespace after a checkout-folder rename. Keep your original `COMPOSE_PROJECT_NAME` if you set a custom value. Internal `LOCALRAG_*` names and container identifiers are retained where necessary for data compatibility; they are not the public product branding. Do not regenerate secrets or run `docker compose down -v` solely because the repository was renamed.
 
 ## 2. Configure environment
 
 Create a local environment file if one does not already exist:
 
-```powershell
-Copy-Item .env.example .env
+```bash
+cp -n .env.example .env
 ```
 
-Set a strong, unique `POSTGRES_PASSWORD` in the repository-root `.env` file before starting the stack. Keep `.env` private and out of Git; do not put real secrets in `.env.example`.
+Set strong, independent private values for `POSTGRES_PASSWORD`, `LOCALMIND_API_KEY` (32+ characters), `LOCALMIND_ADMIN_PASSWORD` (12+ characters), and `LOCALMIND_SESSION_SECRET` (32+ characters) in the repository-root `.env` file. You can generate values using `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`. Keep `.env` private and out of Git; do not put real secrets in `.env.example`. Existing `LOCALRAG_*` secret variables remain supported for backward compatibility.
 
 ## 3. Build
 
-```powershell
+```bash
 docker compose build
 ```
 
@@ -341,13 +350,13 @@ The build creates the application and Ollama images without downloading model ar
 
 ## 4. Start
 
-```powershell
+```bash
 docker compose up -d
 ```
 
 ## 5. Check services
 
-```powershell
+```bash
 docker compose ps
 ```
 
@@ -355,17 +364,20 @@ You should see the web, API, PostgreSQL, Qdrant, and Ollama services (plus the o
 
 ## 6. Open the application
 
-Open:
+Open and sign in with `LOCALMIND_ADMIN_PASSWORD`:
 
 ```text
 http://localhost:3000
 ```
 
-API:
+API health and readiness:
 
-```text
-http://localhost:8000
+```bash
+curl -fsS http://127.0.0.1:8000/health
+curl -fsS http://127.0.0.1:8000/ready
 ```
+
+Readiness may return HTTP 503 during model provisioning. Protected API routes require `X-API-Key`; the browser uses the signed-session Next.js proxy.
 
 ---
 
@@ -393,7 +405,7 @@ into a persistent Docker volume shared with the runtime Ollama container.
 
 Verify the available models with:
 
-```powershell
+```bash
 docker compose exec ollama ollama list
 ```
 
@@ -403,12 +415,12 @@ The runtime Ollama container does not need Internet access to obtain the require
 
 ---
 
-# Using LocalRAG
+# Using LocalMind
 
 The normal workflow is:
 
 ```text
-Start LocalRAG
+Start LocalMind
       │
       ▼
 Open Web UI
@@ -467,7 +479,7 @@ For the most reliable results, ask questions that can be answered directly from 
 
 # Retrieval
 
-The current retrieval baseline is intentionally conservative and frozen for regression testing.
+Retrieval is regression-tested, including document-scoped questions, named-entity retrieval, summaries, and comparisons. The original semantic-search settings below are historical baseline values; specialized retrieval may select additional evidence.
 
 ```text
 Top-K:             5
@@ -476,7 +488,7 @@ Score threshold:   0.45
 
 ### Normal retrieval
 
-Questions without an explicit filename use semantic retrieval:
+Ordinary questions use semantic retrieval, with specialized retrieval paths where appropriate:
 
 ```text
 question
@@ -514,9 +526,21 @@ What does "Behavioural_questions.docx" contain?
 
 ---
 
+## Document-Scoped Research And Index Maintenance
+
+When a document is selected, retrieval remains scoped to that document while retaining the named-entity and specialized comparison paths used to answer technical questions. If evidence for a source-dependent answer is missing, the answer should disclose that limitation rather than fabricate it. Answers and citations should be checked against the original passages for consequential use.
+
+Re-upload an existing document and confirm reindexing when extraction logic changes; the previous vectors remain until replacement indexing succeeds. Operators can inspect index contents without modifying them:
+
+```bash
+docker compose exec api python -m app.tools.index_audit Interview_Questions.docx EC2 IAM Bedrock
+```
+
+---
+
 # RAG Security
 
-LocalRAG treats retrieved documents as **untrusted data**.
+LocalMind treats retrieved documents as **untrusted data**.
 
 The prompt boundary separates application instructions from retrieved content:
 
@@ -658,7 +682,7 @@ A retrieval change should be evaluated against this baseline rather than judged 
 # Repository Layout
 
 ```text
-localrag/
+LocalMind/
 ├── apps/
 │   ├── api/
 │   │   ├── app/
@@ -698,7 +722,7 @@ localrag/
 └── SECURITY.md
 ```
 
-LocalRAG is **Docker-first**. Kubernetes is not part of the normal deployment workflow or project scope.
+LocalMind is **Docker-first**. Kubernetes is not part of the normal deployment workflow or project scope.
 
 ---
 
@@ -733,7 +757,7 @@ Do not commit `.env`, `.env.local`, credentials, private keys, or other secrets.
 
 # Persistent Data
 
-LocalRAG persists application data through Docker volumes / bind mounts.
+LocalMind persists application data through Docker volumes / bind mounts.
 
 Typical local application data includes:
 
@@ -749,7 +773,7 @@ Treat the Qdrant and document directories as application state.
 
 To remove containers and persistent Compose volumes:
 
-```powershell
+```bash
 docker compose down -v
 ```
 
@@ -761,56 +785,56 @@ Use this carefully because it removes persisted container-managed data.
 
 ### Start
 
-```powershell
+```bash
 docker compose up -d
 ```
 
 ### Stop
 
-```powershell
+```bash
 docker compose down
 ```
 
 ### View status
 
-```powershell
+```bash
 docker compose ps
 ```
 
 ### Follow logs
 
-```powershell
+```bash
 docker compose logs -f
 ```
 
 ### API logs
 
-```powershell
+```bash
 docker compose logs -f api
 ```
 
 ### Web logs
 
-```powershell
+```bash
 docker compose logs -f web
 ```
 
 ### Rebuild
 
-```powershell
+```bash
 docker compose build --no-cache
 docker compose up -d
 ```
 
 ### Open an API shell
 
-```powershell
+```bash
 docker compose exec api python
 ```
 
 ### List Ollama models
 
-```powershell
+```bash
 docker compose exec ollama ollama list
 ```
 
@@ -820,25 +844,25 @@ docker compose exec ollama ollama list
 
 Run the API test suite inside the container:
 
-```powershell
+```bash
 docker compose exec api pytest -q
 ```
 
 Run the focused RAG and retrieval tests:
 
-```powershell
+```bash
 docker compose exec api pytest -q tests/test_rag.py tests/test_retrieval.py
 ```
 
 Run Web lint:
 
-```powershell
+```bash
 docker compose exec web npm run lint
 ```
 
 Run Web type checking:
 
-```powershell
+```bash
 docker compose exec web npm run typecheck
 ```
 
@@ -846,7 +870,7 @@ docker compose exec web npm run typecheck
 
 # CI / DevSecOps
 
-LocalRAG uses a staged GitHub Actions pipeline.
+LocalMind uses a staged GitHub Actions pipeline.
 
 ```text
 Change detection
@@ -931,19 +955,19 @@ Read [`SECURITY.md`](SECURITY.md) for the detailed security policy and threat mo
 
 Check status:
 
-```powershell
+```bash
 docker compose ps
 ```
 
 Inspect logs:
 
-```powershell
+```bash
 docker compose logs --no-color
 ```
 
 Restart:
 
-```powershell
+```bash
 docker compose restart
 ```
 
@@ -954,13 +978,13 @@ docker compose restart
 
 Check that both services are running:
 
-```powershell
+```bash
 docker compose ps
 ```
 
 Check API logs:
 
-```powershell
+```bash
 docker compose logs --no-color api
 ```
 
@@ -975,19 +999,19 @@ The required models are provisioned by the `ollama-init` service.
 
 Check the models:
 
-```powershell
+```bash
 docker compose exec ollama ollama list
 ```
 
 If the models are missing, inspect the provisioning logs:
 
-```powershell
+```bash
 docker compose logs --no-color ollama-init
 ```
 
 Then restart the stack:
 
-```powershell
+```bash
 docker compose up -d
 ```
 
@@ -1000,19 +1024,19 @@ Model provisioning requires Internet access from the `ollama-init` service.
 
 Check the provisioning logs:
 
-```powershell
+```bash
 docker compose logs --no-color ollama-init
 ```
 
 Then start the stack:
 
-```powershell
+```bash
 docker compose up -d
 ```
 
 Check the build/runtime logs if the problem persists:
 
-```powershell
+```bash
 docker compose logs --no-color ollama
 ```
 
@@ -1034,19 +1058,19 @@ Subsequent starts reuse the existing `ollama_models` volume and do not need to d
 
 Stop the stack:
 
-```powershell
+```bash
 docker compose down
 ```
 
 If you intentionally want to remove persisted Compose volumes:
 
-```powershell
+```bash
 docker compose down -v
 ```
 
 Then rebuild/start:
 
-```powershell
+```bash
 docker compose up -d
 ```
 
@@ -1056,7 +1080,7 @@ docker compose up -d
 
 # Project Scope
 
-LocalRAG is intentionally focused.
+LocalMind is intentionally focused.
 
 ## In scope
 
@@ -1122,7 +1146,7 @@ Avoid introducing infrastructure that does not improve the actual local use case
 | Alembic schema migrations | Complete |
 | Conversation API and idempotent chat retries | Complete |
 | Conversation history, restore, rename, archive, delete | Complete |
-| Slate UI refinements | Frozen baseline |
+| Document-first workspace and signed-session sign-in | Implemented; runtime acceptance pending |
 | FastAPI API | Complete |
 | Docker Compose runtime | Complete |
 | Qdrant integration | Complete |
@@ -1146,7 +1170,7 @@ Avoid introducing infrastructure that does not improve the actual local use case
 
 # Contributing
 
-LocalRAG is primarily a learning and personal engineering project, but improvements are welcome.
+LocalMind is primarily a learning and personal engineering project, but improvements are welcome.
 
 Before submitting changes:
 
@@ -1165,11 +1189,43 @@ See [`LICENSE`](LICENSE) for the project license.
 
 ---
 
-## LocalRAG
+## LocalMind
 
 Built as a practical exploration of local LLMs, retrieval, document processing, application security, and DevSecOps.
 
-If LocalRAG is useful to you, consider giving the repository a ⭐.
+If LocalMind is useful to you, consider giving the repository a ⭐.
+
+---
+
+# Backup, Model Provisioning And Quality Checks
+
+Pause document uploads and chat writes before taking backups. Use the backward-compatible LocalMind backup wrapper, and verify restores separately from file-hash checks:
+
+```bash
+python3 scripts/backup_localmind.py --output backups
+python3 scripts/backup_localmind.py --verify backups/<backup-folder>
+```
+
+Backups contain private data and should be encrypted. The commands above require Python on the host; the normal Docker application workflow does not.
+
+An additional Ollama model can be provisioned through the Bash helper, which temporarily allows outbound access and then disconnects the runtime container:
+
+```bash
+bash scripts/pull-ollama-model.sh qwen3:8b
+```
+
+This does not automatically change `LLM_MODEL`. Set that variable in `.env` and restart the relevant services to select a different model.
+
+After preparing the evaluation fixture, a live model-based evaluation can be run with:
+
+```bash
+export LOCALMIND_API_KEY='your-private-api-key'
+export LOCALMIND_EVAL_API_URL='http://127.0.0.1:8000/chat'
+python3 evals/run_evaluation.py
+unset LOCALMIND_API_KEY LOCALMIND_EVAL_API_URL
+```
+
+An historical evaluation baseline is not proof of the current model's accuracy; rerun evaluation after retrieval or model changes. GitHub Actions security checks, integration tests and runtime acceptance are separate verification gates.
 
 ---
 
@@ -1207,15 +1263,15 @@ Never commit `.env` or include it in repository archives. GitHub Actions workflo
 
 For retry-safe chat requests, send a stable `Idempotency-Key` header with `conversation_id`. Reusing a completed key returns the stored response rather than generating a duplicate answer.
 
-The frontend history/sidebar is integrated with the existing document upload and RAG chat workflows. The evidence panel must display citations returned by the API; it must not invent source passages.
+The dedicated Conversations view is integrated with the existing document upload and RAG research workflows. The evidence panel must display citations returned by the API; it must not invent source passages.
 
-The deployment remains local and single-user. Ownership metadata is not authentication, authorization, or tenant isolation. Do not expose the API to untrusted networks until those controls are implemented.
+The deployment remains local and single-user. The password-protected web session and backend API key do not provide multi-user authorization or tenant isolation. Do not expose the API to untrusted networks without additional security review, HTTPS and rate limiting.
 
 ## Persistence validation
 
 Run from the repository root:
 
-```powershell
+```bash
 docker compose up -d --build
 docker compose ps
 docker compose logs --no-color api

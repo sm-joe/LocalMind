@@ -1,3 +1,8 @@
+# Keep the original Compose project identity when a checkout is renamed to LocalMind.
+# Existing qdrant_data and ollama_models volumes use this project prefix.
+# Operators with custom historical project names should explicitly set COMPOSE_PROJECT_NAME.
+name: ${COMPOSE_PROJECT_NAME:-localrag}
+
 services:
   api:
     build:
@@ -5,11 +10,14 @@ services:
     container_name: localrag-api
     restart: unless-stopped
     environment:
+      APP_ENV: production
+      LOCALRAG_API_KEY: ${LOCALMIND_API_KEY:-${LOCALRAG_API_KEY:?Set LOCALMIND_API_KEY (32+ random characters) in .env}}
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       OLLAMA_BASE_URL: http://ollama:11434
       LLM_PROVIDER: ollama
       LLM_MODEL: ${LLM_MODEL:-llama3.2:3b}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-6144}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
@@ -42,6 +50,11 @@ services:
   web:
     build:
       context: ./apps/web
+    environment:
+      LOCALRAG_API_INTERNAL_URL: http://api:8000
+      LOCALRAG_API_KEY: ${LOCALMIND_API_KEY:-${LOCALRAG_API_KEY:?Set LOCALMIND_API_KEY in .env}}
+      LOCALRAG_ADMIN_PASSWORD: ${LOCALMIND_ADMIN_PASSWORD:-${LOCALRAG_ADMIN_PASSWORD:?Set LOCALMIND_ADMIN_PASSWORD in .env}}
+      LOCALRAG_SESSION_SECRET: ${LOCALMIND_SESSION_SECRET:-${LOCALRAG_SESSION_SECRET:?Set LOCALMIND_SESSION_SECRET (32+ random characters) in .env}}
     container_name: localrag-web
     restart: unless-stopped
     ports:
@@ -171,6 +184,10 @@ services:
           fi
         fi
 
+        # The init image runs as root, while the serving image deliberately
+        # uses UID/GID 10001. Without transferring ownership of the shared
+        # named volume, later model pulls fail with EACCES on blobs/*-partial-*.
+        chown -R 10001:10001 /opt/ollama-models
         echo "Ollama model initialization completed."
 
   ollama:

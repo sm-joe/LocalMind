@@ -1,5 +1,5 @@
 {
-  "name": "localrag-web",
+  "name": "localmind-web",
   "private": true,
   "version": "0.1.0",
   "scripts": {
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "^16.3.8",
+    "next": "16.4.1",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
@@ -20,7 +20,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^16.3.8",
+    "eslint-config-next": "16.4.1",
     "typescript": "^5.9.0"
   }
 }

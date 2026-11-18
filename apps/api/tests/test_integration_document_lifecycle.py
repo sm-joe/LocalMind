@@ -68,7 +68,10 @@ def test_document_lifecycle_upload_duplicate_list_delete(
         qdrant=qdrant,
     )
 
+    # A unique payload also isolates the PostgreSQL hash registry across runs.
+    # Collection isolation alone is insufficient now that deduplication is durable.
     document_content = (
+        f"Run {uuid.uuid4().hex}. "
         "LocalRAG document lifecycle integration test. "
         "This document verifies real text ingestion, embedding "
         "generation, Qdrant persistence, duplicate detection, "
@@ -79,6 +82,10 @@ def test_document_lifecycle_upload_duplicate_list_delete(
 
     try:
         with TestClient(app) as client:
+            # Compose configures a private API key; every business endpoint
+            # must be exercised through its real authentication boundary.
+            if settings.localrag_api_key:
+                client.headers.update({"X-API-Key": settings.localrag_api_key})
             # 1. Upload the original document.
             upload_response = client.post(
                 "/documents/upload",

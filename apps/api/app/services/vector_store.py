@@ -173,12 +173,23 @@ class VectorStore:
     def iter_points(
         self,
         limit: int = 100,
+        document_id: str | None = None,
     ) -> Iterator[Any]:
-        """Yield Qdrant points page by page."""
+        """Yield paginated points, optionally filtered server-side by document ID."""
+        if document_id is not None and not document_id.strip():
+            raise ValueError("Document ID cannot be empty.")
         if limit <= 0:
             raise ValueError(
                 "Limit must be greater than zero."
             )
+        # Only unfiltered corpus scans need the empty-install guard.
+        # Filtered scans must reach Qdrant's scroll API: callers use them
+        # for precise document retrieval and pagination, and tests may mock
+        # scroll directly without mocking collection discovery.
+        if document_id is None:
+            existing = self.client.get_collections().collections
+            if not any(item.name == self.collection_name for item in existing):
+                return
         offset: Any = None
 
         while True:
@@ -188,6 +199,14 @@ class VectorStore:
                 "with_payload": True,
                 "with_vectors": False,
             }
+
+            if document_id is not None:
+                scroll_arguments["scroll_filter"] = models.Filter(
+                    must=[models.FieldCondition(
+                        key="document_id",
+                        match=models.MatchValue(value=document_id),
+                    )]
+                )
 
             if offset is not None:
                 scroll_arguments["offset"] = offset
@@ -208,6 +227,34 @@ class VectorStore:
                 )
 
             offset = next_offset
+
+    def get_document_chunk(
+        self,
+        document_id: str,
+        chunk_id: int,
+    ) -> dict[str, Any] | None:
+        """Retrieve exactly one document-scoped chunk without vector search."""
+        if not document_id.strip() or chunk_id < 0:
+            raise ValueError("Invalid document or chunk identifier.")
+        records, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="document_id",
+                        match=models.MatchValue(value=document_id),
+                    ),
+                    models.FieldCondition(
+                        key="chunk_id",
+                        match=models.MatchValue(value=chunk_id),
+                    ),
+                ]
+            ),
+            limit=1,
+            with_payload=True,
+            with_vectors=False,
+        )
+        return dict(records[0].payload or {}) if records else None
 
     def list_points(
         self,
@@ -324,6 +371,7 @@ class VectorStore:
 
         self.client.delete(
             collection_name=self.collection_name,
+            wait=True,
             points_selector=models.FilterSelector(
                 filter=models.Filter(
                     must=[

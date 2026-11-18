@@ -1,13 +1,15 @@
+import json
 import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
-from app.db import get_db
+from app.db import get_db, get_session_factory
 from app.models import Conversation, Message, MessageSource
 from app.services.embeddings import EmbeddingService
 from app.services.llm import LLMService
@@ -26,6 +28,7 @@ router = APIRouter(
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     top_k: int = Field(default=5, ge=1, le=20)
+    document_id: str | None = Field(default=None, min_length=1, max_length=128)
     # Optional for backward compatibility. New history-aware clients should
     # create a conversation and send its ID with each chat request.
     conversation_id: str | None = Field(default=None, min_length=36, max_length=36)
@@ -87,12 +90,17 @@ def create_rag_service() -> RAGService:
         embedding_service=embedding_service,
         vector_store=vector_store,
         top_k=5,
-        score_threshold=0.40,
+        # A fixed cosine cutoff can discard every chunk for a perfectly
+        # valid user question. Preserve the best ranked evidence instead;
+        # the RAG service still requires grounded, in-range citations.
+        score_threshold=0.0,
+        lexical_weight=0.15,
     )
 
     llm_service = LLMService(
         base_url=settings.ollama_base_url,
         model=settings.llm_model,
+        num_ctx=settings.ollama_num_ctx,
     )
 
     return RAGService(
@@ -271,10 +279,15 @@ def chat(
 
     try:
         service = create_rag_service()
-        result = service.answer(
-            question=request.question,
-            top_k=request.top_k,
-        )
+        # Preserve the original call signature for existing clients and
+        # adapters, and activate scoped retrieval only when explicitly selected.
+        answer_options = {
+            "question": request.question,
+            "top_k": request.top_k,
+        }
+        if request.document_id is not None:
+            answer_options["document_id"] = request.document_id
+        result = service.answer(**answer_options)
 
         response = ChatResponse(
             answer=result.answer,
@@ -360,3 +373,124 @@ def chat(
             status_code=500,
             detail="RAG chat failed.",
         ) from exc
+
+
+def _stream_event(kind: str, **values) -> str:
+    return "data: " + json.dumps({"type": kind, **values}) + "\n\n"
+
+
+@router.post("/stream")
+def chat_stream(
+    request: ChatRequest,
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key", max_length=128
+    ),
+) -> StreamingResponse:
+    """Stream real Ollama tokens, preserving LocalRAG conversation history.
+
+    Unlike /chat, send a first SSE frame before local CPU inference begins.
+    Database sessions are acquired *inside* the iterator because the HTTP
+    response remains open until the model completes.
+    """
+    if idempotency_key and not request.conversation_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Idempotency-Key requires a conversation_id.",
+        )
+
+    def events():
+        # Allows browser to confirm backend reachability immediately.
+        yield _stream_event("status", stage="retrieving")
+        assistant_id = None
+        with get_session_factory()() as db:
+            try:
+                user_message = None
+                assistant_message = None
+                if request.conversation_id:
+                    user_message, assistant_message, replay = _persist_start(
+                        db, request.conversation_id, request.question,
+                        idempotency_key,
+                    )
+                    assistant_id = assistant_message.id
+                    if replay is not None:
+                        yield _stream_event("done", result=replay.model_dump(mode="json"))
+                        return
+                service = create_rag_service()
+                response = None
+                saw_tokens = False
+                for kind, item in service.stream_answer(
+                    question=request.question,
+                    top_k=request.top_k,
+                    document_id=request.document_id,
+                ):
+                    if kind == "chunk":
+                        if not saw_tokens:
+                            yield _stream_event("status", stage="generating")
+                            saw_tokens = True
+                        yield _stream_event("chunk", text=item)
+                    elif kind == "done":
+                        result = item
+                        response = ChatResponse(
+                            answer=result.answer,
+                            sources=[
+                                ChatSource(
+                                    document_id=source.document_id,
+                                    filename=source.filename,
+                                    chunk_id=source.chunk_id,
+                                    score=source.score,
+                                    citation=source.citation,
+                                ) for source in result.sources
+                            ],
+                            retrieval=ChatRetrievalDiagnostics(
+                                **vars(result.retrieval)
+                            ),
+                            performance=ChatPerformance(
+                                **vars(result.performance)
+                            ),
+                            conversation_id=request.conversation_id,
+                            user_message_id=(
+                                user_message.id if user_message else None
+                            ),
+                            assistant_message_id=assistant_id,
+                        )
+                if response is None:
+                    raise RuntimeError("Ollama streaming ended without completion.")
+                if assistant_message is not None:
+                    assistant_message.content = response.answer
+                    assistant_message.status = "complete"
+                    assistant_message.metadata_json = {
+                        "retrieval": response.retrieval.model_dump(mode="json"),
+                        "performance": response.performance.model_dump(mode="json"),
+                    }
+                    for index, source in enumerate(response.sources, start=1):
+                        db.add(MessageSource(
+                            message_id=assistant_id,
+                            source_index=index,
+                            document_id=source.document_id,
+                            filename=source.filename,
+                            chunk_id=source.chunk_id,
+                            score=source.score,
+                            citation=source.citation,
+                        ))
+                    conversation = db.get(Conversation, request.conversation_id)
+                    if conversation is not None:
+                        conversation.updated_at = datetime.now(timezone.utc)
+                    db.commit()
+                yield _stream_event("done", result=response.model_dump(mode="json"))
+            except Exception as exc:
+                if assistant_id is not None:
+                    _mark_failed(db, assistant_id, exc)
+                logger.exception("Streaming RAG request failed.")
+                yield _stream_event(
+                    "error",
+                    detail="Document question answering failed. Check API and Ollama logs.",
+                )
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )

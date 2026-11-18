@@ -1,0 +1,3 @@
+# Verified false positive: HTTP header alias "Idempotency-Key", not a credential.
+# Scope is a single historical commit/file/rule/line; keep all other findings blocking.
+38e775e796413589b9b9f35daeac3a3fa2cb8f0f:apps/api/app/routes/chat.py:generic-api-key:386

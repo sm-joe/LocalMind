@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy import create_engine
 
 from app.db import get_db
+from app.auth import require_api_key
 from app.main import app
 from app.models import Base, Conversation, Message, MessageSource
 from app.routes import chat as chat_route
@@ -47,6 +48,8 @@ def client():
             session.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    # Unit tests isolate authorization; separate tests verify auth rejects bad keys.
+    app.dependency_overrides[require_api_key] = lambda: None
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

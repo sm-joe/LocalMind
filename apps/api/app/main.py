@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from ollama import Client as OllamaClient
 from qdrant_client import QdrantClient
 
+from app.auth import require_api_key
 from app.config import get_settings
 from app.db import check_database
 from app.routes.chat import router as chat_router
@@ -11,7 +12,7 @@ from app.routes.documents import router as documents_router
 
 
 app = FastAPI(
-    title="LocalRAG API",
+    title="LocalMind API",
     version="0.2.0",
 )
 
@@ -29,6 +30,7 @@ app.add_middleware(
         "DELETE",
     ],
     allow_headers=[
+        "X-API-Key",
         "Content-Type",
         "Idempotency-Key",
     ],
@@ -141,6 +143,6 @@ def ready() -> dict:
     return {"status": "ready", "dependencies": dependencies}
 
 
-app.include_router(documents_router)
-app.include_router(chat_router)
-app.include_router(conversations_router)
+app.include_router(documents_router, dependencies=[Depends(require_api_key)])
+app.include_router(chat_router, dependencies=[Depends(require_api_key)])
+app.include_router(conversations_router, dependencies=[Depends(require_api_key)])

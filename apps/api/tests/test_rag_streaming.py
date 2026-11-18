@@ -1,0 +1,261 @@
+"""Reference-style RAG streaming: small retrieval, immediate tokens, no retry."""
+from dataclasses import dataclass
+
+from app.services.rag import RAGService
+from app.services.retrieval import (
+    RetrievedChunk, RetrievalDiagnostics, RetrievalPerformance, RetrievalResult,
+)
+
+
+def corpus(count=12):
+    chunks = [
+        RetrievedChunk(
+            document_id="interview-document",
+            filename="Interview_Questions.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            chunk_id=i,
+            text=f"Interview topic {i}: Angular and TypeScript answer guidance.",
+            start_char=i * 65,
+            end_char=(i + 1) * 65,
+            score=0.9,
+        )
+        for i in range(count)
+    ]
+    return RetrievalResult(
+        chunks=chunks,
+        diagnostics=RetrievalDiagnostics(
+            requested_limit=count, candidate_count=count, returned_count=count,
+            filtered_count=0, top_candidate_score=.9, bottom_candidate_score=.9,
+            top_score=.9, bottom_score=.9, has_context=bool(chunks),
+        ),
+        performance=RetrievalPerformance(
+            embedding_ms=0, search_ms=1, total_ms=1,
+        ),
+    )
+
+
+def test_summary_streams_tokens_once_and_preserves_citations():
+    class Retrieval:
+        def retrieve_document(self, query, limit=None):
+            assert "Summarize" in query
+            return corpus()
+
+    class LLM:
+        calls = 0
+        prompts = []
+        def stream(self, prompt):
+            self.calls += 1
+            self.prompts.append(prompt)
+            yield "This document covers "
+            yield "Angular and TypeScript [1]."
+
+    llm = LLM()
+    parts = list(RAGService(Retrieval(), llm).stream_answer(
+        "Summarize the document."
+    ))
+    assert [kind for kind, _ in parts] == ["chunk", "chunk", "done"]
+    assert parts[0][1] == "This document covers "
+    assert llm.calls == 1
+    assert len(llm.prompts[0]) < 8000
+    response = parts[-1][1]
+    assert response.answer == "This document covers Angular and TypeScript [1]."
+    assert len(response.sources) == 12
+    assert response.sources[0].chunk_id == 0
+    assert response.sources[-1].chunk_id == 11
+
+
+def test_question_streams_top_three_relevant_chunks():
+    class Retrieval:
+        def retrieve(self, query, limit=None):
+            assert limit == 3
+            return corpus()
+
+    class LLM:
+        def stream(self, prompt):
+            assert prompt.count("<source id=") == 3
+            yield "Angular and TypeScript [1]."
+
+    output = list(RAGService(Retrieval(), LLM()).stream_answer("What are the topics?"))
+    assert len(output[-1][1].sources) == 3
+    assert output[-1][1].answer == "Angular and TypeScript [1]."
+
+
+def test_uncited_model_output_never_relabels_unverified_claims_as_cited():
+    class Retrieval:
+        def retrieve(self, query, limit=None):
+            return corpus(1)
+
+    class LLM:
+        def stream(self, prompt):
+            yield "Unsupported claim."
+
+    events = list(RAGService(Retrieval(), LLM()).stream_answer("What is covered?"))
+    assert events[0] == ("chunk", "Unsupported claim.")
+    assert events[-1][0] == "done"
+    assert events[-1][1].answer.startswith(
+        "Unverified answer (citation or source validation failed):"
+    )
+    assert "Unsupported claim." in events[-1][1].answer
+    assert "[1]" not in events[-1][1].answer
+    assert events[-1][1].sources[0].chunk_id == 0
+
+
+def test_missing_corpus_streams_a_clear_answer_without_model_call():
+    class Retrieval:
+        def retrieve(self, query, limit=None):
+            return corpus(0)
+
+    class LLM:
+        def stream(self, prompt):
+            raise AssertionError("Do not call Ollama when Qdrant returned no chunks.")
+
+    events = list(RAGService(Retrieval(), LLM()).stream_answer("Anything?"))
+    assert len(events) == 1
+    assert events[0][0] == "done"
+    assert events[0][1].sources == []
+
+
+def test_requested_list_reads_document_wide_instead_of_top_three_search():
+    class Retrieval:
+        def retrieve_document(self, query, limit=None):
+            return corpus(12)
+        def retrieve(self, query, limit=None):
+            raise AssertionError("Document-wide extraction must not use top-3 semantic search")
+
+    class LLM:
+        prompts = []
+        def stream(self, prompt):
+            self.prompts.append(prompt)
+            yield "1. Angular [1]\\n2. TypeScript [2]"
+
+    llm = LLM()
+    events = list(RAGService(Retrieval(), llm).stream_answer(
+        "List top 10 services mentioned in the document."
+    ))
+    assert len(events[-1][1].sources) == 12
+    assert "Extract up to 10" in llm.prompts[0]
+    assert llm.prompts[0].count("<source id=") == 12
+
+
+def test_summary_without_citation_keeps_actual_synthesis_not_chopped_excerpts():
+    class Retrieval:
+        def retrieve_document(self, query, limit=None):
+            return corpus(12)
+    class LLM:
+        def stream(self, prompt):
+            yield "The interview guide explains architecture and deployment topics."
+
+    events = list(RAGService(Retrieval(), LLM()).stream_answer(
+        "Summarize the document."
+    ))
+    response = events[-1][1]
+    assert "The interview guide explains architecture" in response.answer
+    assert "Relevant verbatim excerpts" not in response.answer
+    assert "Unverified answer" not in response.answer
+    assert "individual summary statements do not have verified inline citations" in response.answer
+    assert len(response.sources) == 12
+
+
+def test_uncited_document_summary_is_not_presented_as_fully_verified():
+    class Retrieval:
+        def retrieve_document(self, query, limit=None):
+            return corpus(12)
+
+    class LLM:
+        def stream(self, prompt):
+            yield "This document covers AWS interview preparation, IAM and EC2."
+
+    events = list(RAGService(Retrieval(), LLM()).stream_answer(
+        "Summarize the document."
+    ))
+    result = events[-1][1]
+    assert result.answer.startswith(
+        "This document covers AWS interview preparation"
+    )
+    assert "Unverified answer (citation or source validation failed)" not in result.answer
+    assert "do not have verified inline citations" in result.answer
+    assert len(result.sources) == 12
+
+
+def test_absent_named_service_cannot_be_generated_from_general_knowledge():
+    class Retrieval:
+        def retrieve_named_entity(self, query, entity, limit):
+            assert entity == "Amazon Bedrock"
+            return corpus(0)
+
+    class LLM:
+        def stream(self, prompt):
+            raise AssertionError("Model must not run without matching indexed passages.")
+
+    events = list(RAGService(Retrieval(), LLM()).stream_answer(
+        "What is Amazon Bedrock service mentioned in the document?"
+    ))
+    result = events[-1][1]
+    assert result.sources == []
+    assert "not mentioned in the indexed document text" in result.answer
+
+
+def test_selected_document_absent_bedrock_never_calls_model():
+    result = corpus(12)
+
+    class Retrieval:
+        def retrieve_document_by_id(self, document_id, query):
+            assert document_id == "interview-document"
+            return result
+
+    class Model:
+        def stream(self, prompt):
+            raise AssertionError("Absent named service must not reach Ollama")
+
+    events = list(RAGService(Retrieval(), Model()).stream_answer(
+        "What is Amazon Bedrock?", document_id="interview-document"
+    ))
+    assert events[-1][1].sources == []
+    assert "not mentioned in the indexed document text" in events[-1][1].answer
+
+
+def test_selected_document_named_subject_late_chunk_is_retrieved():
+    result = corpus(12)
+    from dataclasses import replace
+    result.chunks[11] = replace(
+        result.chunks[11],
+        text="Amazon Bedrock is a managed service for generative AI.",
+    )
+
+    class Retrieval:
+        def retrieve_document_by_id(self, document_id, query):
+            return result
+
+    class Model:
+        def stream(self, prompt):
+            assert "Amazon Bedrock is a managed service" in prompt
+            assert "Interview topic 0" not in prompt
+            yield "Amazon Bedrock is a managed service [1]."
+
+    answer = list(RAGService(Retrieval(), Model()).stream_answer(
+        "What is Amazon Bedrock?", document_id="interview-document"
+    ))[-1][1]
+    assert [source.chunk_id for source in answer.sources] == [11]
+
+
+def test_selected_document_comparison_uses_both_concept_passages():
+    result = corpus(12)
+    from dataclasses import replace
+    result.chunks[7] = replace(result.chunks[7], text="Amazon EC2 is a virtual server compute service.")
+    result.chunks[9] = replace(result.chunks[9], text="AWS IAM controls identities and permissions.")
+
+    class Retrieval:
+        def retrieve_document_by_id(self, document_id, query):
+            return result
+
+    class Model:
+        def stream(self, prompt):
+            assert "EC2 is a virtual server" in prompt
+            assert "IAM controls identities" in prompt
+            yield "EC2 is compute [1], while IAM controls access [2]."
+
+    response = list(RAGService(Retrieval(), Model()).stream_answer(
+        "Compare EC2 and IAM", document_id="interview-document"
+    ))[-1][1]
+    assert [s.chunk_id for s in response.sources[:2]] == [7, 9]
+    assert "EC2 is compute" in response.answer

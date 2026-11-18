@@ -1,10 +1,12 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     app_env: str = "development"
+    localrag_api_key: str = ""
 
     api_host: str = "0.0.0.0"
     api_port: int = 8000
@@ -17,6 +19,7 @@ class Settings(BaseSettings):
 
     llm_provider: str = "ollama"
     llm_model: str = "llama3.2:3b"
+    ollama_num_ctx: int = Field(default=6144, ge=2048, le=32768)
     embedding_model: str = "nomic-embed-text"
 
     database_url: str | None = None

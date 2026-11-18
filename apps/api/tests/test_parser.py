@@ -291,3 +291,39 @@ def test_parse_malformed_docx(
                 "officedocument.wordprocessingml.document"
             ),
         )
+
+def test_parse_docx_includes_table_content_in_original_body_order(tmp_path: Path):
+    """Questions inside Word tables must be indexed, not silently omitted."""
+    from docx import Document
+
+    file_path = tmp_path / "interview-questions.docx"
+    document = Document()
+    document.add_paragraph("EC2 provides virtual machines.")
+    table = document.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "What is Amazon Bedrock?"
+    table.cell(0, 1).text = "Amazon Bedrock is a managed generative AI service."
+    table.cell(1, 0).text = "What is AWS IAM?"
+    table.cell(1, 1).text = "IAM controls permissions to AWS resources."
+    document.add_paragraph("S3 stores objects.")
+    document.save(file_path)
+
+    text = parse_document(file_path, "application/vnd.openxmlformats-officedocument.wordprocessingml.document").text
+    assert "Amazon Bedrock is a managed generative AI service." in text
+    assert "IAM controls permissions" in text
+    assert text.index("EC2 provides") < text.index("What is Amazon Bedrock?")
+    assert text.index("What is Amazon Bedrock?") < text.index("S3 stores")
+    assert "\n\n" in text
+
+
+def test_parse_docx_with_only_table_content(tmp_path: Path):
+    from docx import Document
+
+    file_path = tmp_path / "table-only.docx"
+    document = Document()
+    document.add_table(rows=1, cols=2)
+    document.tables[0].cell(0, 0).text = "Amazon Bedrock"
+    document.tables[0].cell(0, 1).text = "Managed foundation model platform"
+    document.save(file_path)
+    text = parse_document(file_path, "application/vnd.openxmlformats-officedocument.wordprocessingml.document").text
+    assert "Amazon Bedrock" in text
+    assert "Managed foundation model platform" in text
