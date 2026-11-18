@@ -56,10 +56,10 @@ def test_summary_streams_tokens_once_and_preserves_citations():
     assert [kind for kind, _ in parts] == ["chunk", "chunk", "done"]
     assert parts[0][1] == "This document covers "
     assert llm.calls == 1
-    assert len(llm.prompts[0]) < 5000
+    assert len(llm.prompts[0]) < 8000
     response = parts[-1][1]
     assert response.answer == "This document covers Angular and TypeScript [1]."
-    assert len(response.sources) == 8
+    assert len(response.sources) == 12
     assert response.sources[0].chunk_id == 0
     assert response.sources[-1].chunk_id == 11
 
@@ -92,9 +92,12 @@ def test_uncited_model_output_never_relabels_unverified_claims_as_cited():
     events = list(RAGService(Retrieval(), LLM()).stream_answer("What is covered?"))
     assert events[0] == ("chunk", "Unsupported claim.")
     assert events[-1][0] == "done"
-    assert events[-1][1].answer.startswith("Relevant verbatim excerpts:")
-    assert "Interview topic 0" in events[-1][1].answer
-    assert "[1]" in events[-1][1].answer
+    assert events[-1][1].answer.startswith(
+        "Unverified answer (the model omitted valid citations):"
+    )
+    assert "Unsupported claim." in events[-1][1].answer
+    assert "[1]" not in events[-1][1].answer
+    assert events[-1][1].sources[0].chunk_id == 0
 
 
 def test_missing_corpus_streams_a_clear_answer_without_model_call():
@@ -110,3 +113,42 @@ def test_missing_corpus_streams_a_clear_answer_without_model_call():
     assert len(events) == 1
     assert events[0][0] == "done"
     assert events[0][1].sources == []
+
+
+def test_requested_list_reads_document_wide_instead_of_top_three_search():
+    class Retrieval:
+        def retrieve_document(self, query, limit=None):
+            return corpus(12)
+        def retrieve(self, query, limit=None):
+            raise AssertionError("Document-wide extraction must not use top-3 semantic search")
+
+    class LLM:
+        prompts = []
+        def stream(self, prompt):
+            self.prompts.append(prompt)
+            yield "1. Angular [1]\\n2. TypeScript [2]"
+
+    llm = LLM()
+    events = list(RAGService(Retrieval(), llm).stream_answer(
+        "List top 10 services mentioned in the document."
+    ))
+    assert len(events[-1][1].sources) == 12
+    assert "Extract up to 10" in llm.prompts[0]
+    assert llm.prompts[0].count("<source id=") == 12
+
+
+def test_summary_without_citation_keeps_actual_synthesis_not_chopped_excerpts():
+    class Retrieval:
+        def retrieve_document(self, query, limit=None):
+            return corpus(12)
+    class LLM:
+        def stream(self, prompt):
+            yield "The interview guide explains architecture and deployment topics."
+
+    events = list(RAGService(Retrieval(), LLM()).stream_answer(
+        "Summarize the document."
+    ))
+    response = events[-1][1]
+    assert "The interview guide explains architecture" in response.answer
+    assert "Relevant verbatim excerpts" not in response.answer
+    assert "Unverified answer" in response.answer
