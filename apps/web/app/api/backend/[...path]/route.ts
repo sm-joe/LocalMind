@@ -35,11 +35,17 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     if (body && body.byteLength > 12 * 1024 * 1024) {
       return NextResponse.json({ detail: "Request body too large." }, { status: 413 });
     }
-    // A local CPU-run LLM may need several minutes for its first response.
-    // Uploads and ordinary API calls retain the shorter network timeout.
-    const timeoutMs = path.length === 1 && path[0] === "chat" && request.method === "POST"
-      ? 300000
-      : 120000;
+    // Ollama streams through /chat/stream and can take several minutes
+    // on a CPU before completing. The generic 120-second request deadline
+    // previously aborted an active SSE body, which appeared as "Network error"
+    // in the browser. Reserve a larger overall budget for the stream.
+    // Non-stream API requests retain their existing deadlines.
+    const isChatStream = path.length === 2
+      && path[0] === "chat" && path[1] === "stream" && request.method === "POST";
+    const timeoutMs = isChatStream ? 900000
+      : path.length === 1 && path[0] === "chat" && request.method === "POST"
+        ? 300000
+        : 120000;
     const upstream = await fetch(target, {
       method: request.method,
       headers,
@@ -50,7 +56,11 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const result = new NextResponse(upstream.body, { status: upstream.status });
     const responseType = upstream.headers.get("content-type");
     if (responseType) result.headers.set("Content-Type", responseType);
-    result.headers.set("Cache-Control", "no-store");
+    result.headers.set("Cache-Control", isChatStream ? "no-cache, no-transform" : "no-store");
+    if (isChatStream) {
+      result.headers.set("X-Accel-Buffering", "no");
+      result.headers.set("Connection", "keep-alive");
+    }
     return result;
   } catch (error) {
     // Do not tell the user that the API is down when a slow first model
