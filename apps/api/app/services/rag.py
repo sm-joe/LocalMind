@@ -500,11 +500,11 @@ class RAGService:
             )
             options = []
             for source_id, chunk in enumerate(chunks, 1):
-                for sentence in re.split(r"(?<=[.!?])\\s+", chunk.text):
+                for sentence in re.split(r"(?<=[.!?])\s+", chunk.text):
                     if pattern.search(sentence):
                         sentence = " ".join(sentence.split())
                         definitional = bool(re.search(
-                            r"\\b(?:is|provides|manages|allows|offers|used for)\\b",
+                            r"\b(?:is|provides|manages|allows|offers|used for)\b",
                             sentence, re.IGNORECASE
                         ))
                         options.append((definitional, -len(sentence), source_id, sentence))
@@ -512,7 +512,7 @@ class RAGService:
                 return cls.NO_CONTEXT_ANSWER
             _, _, source_id, sentence = max(options)
             lines.append(f"**{label.upper()}:** {sentence[:350]} [{source_id}]")
-        return "From the indexed document:\\n\\n" + "\\n".join(lines)
+        return "From the indexed document:\n\n" + "\n".join(lines)
 
     @classmethod
     def _comparison_claims_supported(
