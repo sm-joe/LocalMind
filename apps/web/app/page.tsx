@@ -491,34 +491,76 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
         ]);
       }
 
-      const response = await fetch(`${API_URL}/chat`, {
+      const assistantId = `streaming-${crypto.randomUUID()}`;
+      setMessages((current) => [
+        ...current,
+        { id: assistantId, role: "assistant", content: "", sources: [], status: "pending" },
+      ]);
+      const response = await fetch(`${API_URL}/chat/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Idempotency-Key": crypto.randomUUID(),
         },
-        body: JSON.stringify({ question: trimmedQuestion, top_k: 5, conversation_id: conversationId }),
+        body: JSON.stringify({ question: trimmedQuestion, top_k: 3, conversation_id: conversationId }),
       });
       if (!response.ok) {
-        throw await responseError(response, "Unable to get a response from LocalRAG.");
+        throw await responseError(response, "Unable to start document answering.");
       }
-      const data = (await response.json()) as ChatResponse;
-      setMessages((current) => [
-        ...current.filter((message) => message.id !== optimisticId),
-        {
-          id: data.user_message_id ?? optimisticId,
-          role: "user",
-          content: trimmedQuestion,
-          status: "complete",
-        },
-        {
-          id: data.assistant_message_id ?? `assistant-${crypto.randomUUID()}`,
-          role: "assistant",
-          content: data.answer,
-          sources: data.sources,
-          status: "complete",
-        },
-      ]);
+      if (!response.body) throw new Error("The backend did not provide an answer stream.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let completed = false;
+      const consumeEvent = (payload: string) => {
+        if (!payload.startsWith("data: ")) return;
+        const event = JSON.parse(payload.slice(6)) as {
+          type: "chunk" | "done" | "error" | "status";
+          text?: string;
+          detail?: string;
+          result?: ChatResponse;
+        };
+        if (event.type === "chunk" && event.text) {
+          const token = event.text;
+          setMessages((current) => current.map((message) =>
+            message.id === assistantId
+              ? { ...message, content: message.content + token }
+              : message,
+          ));
+        } else if (event.type === "done" && event.result) {
+          completed = true;
+          const data = event.result;
+          setMessages((current) => [
+            ...current.filter((message) => message.id !== optimisticId && message.id !== assistantId),
+            {
+              id: data.user_message_id ?? optimisticId,
+              role: "user" as const,
+              content: trimmedQuestion,
+              status: "complete" as const,
+            },
+            {
+              id: data.assistant_message_id ?? assistantId,
+              role: "assistant" as const,
+              content: data.answer,
+              sources: data.sources,
+              status: "complete" as const,
+            },
+          ]);
+        } else if (event.type === "error") {
+          throw new Error(event.detail ?? "The local model could not answer.");
+        }
+      };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) consumeEvent(frame.trim());
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) consumeEvent(buffer.trim());
+      if (!completed) throw new Error("The model disconnected without completing its answer.");
       await loadConversations();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Something went wrong.");
