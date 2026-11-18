@@ -439,14 +439,10 @@ class RAGService:
             if requested_count_match and answer != self.INVALID_CITATION_ANSWER:
                 answer = self._verify_extracted_list(answer, chunks)
             if comparison and answer != self.INVALID_CITATION_ANSWER:
-                # A citation to IAM-only text does not answer EC2 vs IAM.
-                # Require the answer to address both named subjects.
-                requested = (comparison.group(1), comparison.group(2))
-                if not all(
-                    re.search(
-                        rf"(?<![a-z0-9]){re.escape(term.casefold())}(?![a-z0-9])",
-                        answer.casefold(),
-                    ) for term in requested
+                # Each side of the comparison must have its own grounded
+                # statement, not just a citation somewhere in the answer.
+                if not self._comparison_claims_supported(
+                    answer, chunks, comparison.group(1), comparison.group(2)
                 ):
                     answer = self.INVALID_CITATION_ANSWER
             if answer == self.INVALID_CITATION_ANSWER:
@@ -486,6 +482,51 @@ class RAGService:
                 total_ms=round((perf_counter() - started) * 1000, 2),
             ),
         ))
+
+    @classmethod
+    def _comparison_claims_supported(
+        cls, answer: str, chunks: list[RetrievedChunk],
+        left: str, right: str,
+    ) -> bool:
+        """Require cited, matching evidence for both named comparison sides.
+
+        This validates literal subject coverage and citation locality, not
+        semantic truth of every statement. It prevents an unrelated IAM
+        Role/User explanation being accepted as EC2-vs-IAM evidence.
+        """
+        terms = (left.casefold(), right.casefold())
+        covered: set[str] = set()
+        for line in answer.splitlines():
+            text = line.casefold()
+            mentioned = [
+                term for term in terms if re.search(
+                    rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])",
+                    text
+                )
+            ]
+            if not mentioned:
+                continue
+            # Short headings are not claims; substantive sentences and
+            # list items are. Each such line needs an appropriate citation.
+            if len(line.strip().split()) < 5:
+                continue
+            citations = [
+                int(m.group(1)) for m in cls.CITATION_PATTERN.finditer(line)
+            ]
+            if not citations:
+                return False
+            for term in mentioned:
+                if not any(
+                    1 <= number <= len(chunks)
+                    and re.search(
+                        rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])",
+                        chunks[number - 1].text.casefold(),
+                    )
+                    for number in citations
+                ):
+                    return False
+                covered.add(term)
+        return len(covered) == 2
 
     @classmethod
     def _verify_extracted_list(
