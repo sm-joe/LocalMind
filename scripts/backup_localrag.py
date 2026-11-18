@@ -41,7 +41,7 @@ def sha256_file(path: Path) -> str:
 def create_backup(output_directory: Path) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     identifier = uuid.uuid4().hex[:8]
-    destination = output_directory / f"localrag-{timestamp}-{identifier}"
+    destination = output_directory / f"localmind-{timestamp}-{identifier}"
     destination.mkdir(parents=True, exist_ok=False)
 
     temp_db_path = f"/tmp/localrag-backup-{identifier}.dump"
