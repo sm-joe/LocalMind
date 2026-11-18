@@ -387,7 +387,13 @@ class RAGService:
                     "distinct items actually named in the source. "
                     "Do not claim a ranking unless the document ranks them. "
                     "Use fewer items when the sources do not support the count."
-                    if requested_count_match else "Answer the question directly."
+                    if requested_count_match else (
+                        f"Compare {comparison.group(1)} and {comparison.group(2)} "
+                        "directly. Define each one, explain their different "
+                        "purposes, and cite the corresponding source passage "
+                        "for each. Do not substitute a different comparison."
+                        if comparison else "Answer the question directly."
+                    )
                 )
             )
             prompt = (
