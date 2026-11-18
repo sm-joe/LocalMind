@@ -24,8 +24,10 @@ RESULTS_DIR = (
     / "results"
 )
 
-API_URL = os.getenv("LOCALRAG_EVAL_API_URL", "http://localhost:8000/chat")
-API_KEY = os.getenv("LOCALRAG_API_KEY", "")
+API_URL = os.getenv("LOCALMIND_EVAL_API_URL") or os.getenv(
+    "LOCALRAG_EVAL_API_URL", "http://localhost:8000/chat"
+)
+API_KEY = os.getenv("LOCALMIND_API_KEY") or os.getenv("LOCALRAG_API_KEY", "")
 TOP_K = 3
 
 
