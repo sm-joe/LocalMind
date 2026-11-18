@@ -118,7 +118,11 @@ class RAGService:
         else:
             selected = chunks[:count]
 
-        per_chunk_chars = max(1, cls.MAX_CONTEXT_CHARS // len(selected))
+        # 12 short DOCX chunks should not result in a ~14k-character
+        # prompt and minutes of CPU prefill. The smaller summary budget
+        # samples every selected section and retains citation mapping.
+        context_budget = min(cls.MAX_CONTEXT_CHARS, 6_000) if summary_mode else cls.MAX_CONTEXT_CHARS
+        per_chunk_chars = max(1, context_budget // len(selected))
         return [
             replace(chunk, text=chunk.text[:per_chunk_chars])
             for chunk in selected
@@ -223,39 +227,16 @@ class RAGService:
                 source_count=len(chunks),
             )
 
-            if (
-                not self._has_valid_citations(
-                    generated_answer,
-                    source_count=len(chunks),
-                )
-                or (
-                    summary_mode
-                    and self._is_low_quality_summary(generated_answer)
-                )
+            # One inference per question. A missing citation used to trigger a
+            # second FULL prompt+generation on CPU, doubling or tripling
+            # latency. Keep the strict citation validator and use actual
+            # indexed excerpts if the model cannot provide valid citations.
+            # A cheap formatting failure must never trigger another inference.
+            if not self._has_valid_citations(
+                generated_answer, source_count=len(chunks)
             ):
-                correction_start = perf_counter()
-
-                correction_prompt = self._build_correction_prompt(
-                    question=normalized_question,
-                    chunks=chunks,
-                    previous_answer=generated_answer,
-                    summary_mode=summary_mode,
-                )
-
-                prompt_build_ms += (
-                    perf_counter() - correction_start
-                ) * 1000
-
-                generated_answer = self._normalize_answer(
-                    self.llm_service.generate(
-                        correction_prompt
-                    )
-                )
-
-                self._log_generation_diagnostic(
-                    attempt="correction",
-                    answer=generated_answer,
-                    source_count=len(chunks),
+                logger.info(
+                    "RAG citations unavailable; using stored evidence fallback"
                 )
 
             llm_ms = (
