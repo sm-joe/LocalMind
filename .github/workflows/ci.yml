@@ -218,6 +218,20 @@ jobs:
           python -m unittest discover -s scripts/tests -p 'test_*.py'
           python -m unittest discover -s evals/tests -p 'test_*.py'
 
+      - name: Verify LocalMind And Legacy Compose Secrets
+        working-directory: .
+        run: |
+          export POSTGRES_PASSWORD='ci-db-password-only'
+          export LOCALMIND_API_KEY='ci-localmind-api-key-not-for-production-only'
+          export LOCALMIND_ADMIN_PASSWORD='ci-localmind-admin-only'
+          export LOCALMIND_SESSION_SECRET='ci-localmind-session-secret-not-for-production'
+          docker compose config --quiet
+          unset LOCALMIND_API_KEY LOCALMIND_ADMIN_PASSWORD LOCALMIND_SESSION_SECRET
+          export LOCALRAG_API_KEY='ci-legacy-api-key-not-for-production-only'
+          export LOCALRAG_ADMIN_PASSWORD='ci-legacy-admin-password-only'
+          export LOCALRAG_SESSION_SECRET='ci-legacy-session-secret-not-for-production'
+          docker compose config --quiet
+
       - name: Validate Bash Helper Syntax
         working-directory: .
         run: bash -n scripts/pull-ollama-model.sh
