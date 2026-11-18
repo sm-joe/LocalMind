@@ -1,4 +1,4 @@
-name: LocalRAG RAG Evaluation
+name: LocalMind RAG Evaluation
 
 on:
   pull_request:
