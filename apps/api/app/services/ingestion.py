@@ -48,6 +48,7 @@ class IngestionService:
         file_path: str | Path,
         content_type: str,
         original_filename: str | None = None,
+        force_reindex: bool = False,
     ) -> IngestionResult:
         path = Path(file_path)
         if self.registry is None:
@@ -57,7 +58,11 @@ class IngestionService:
             raise ValueError("Document file does not exist.")
         document_hash = self._calculate_hash(path)
         filename = original_filename or path.name
-        claim = self.registry.acquire(document_hash, filename, content_type)
+        claim = (
+            self.registry.acquire(document_hash, filename, content_type, force=True)
+            if force_reindex else
+            self.registry.acquire(document_hash, filename, content_type)
+        )
         if claim.status == "ready":
             return IngestionResult(
                 document_id=claim.document_id,
@@ -66,7 +71,7 @@ class IngestionService:
                 already_indexed=True,
             )
         try:
-            if claim.previous_document_id is not None:
+            if claim.previous_document_id is not None and not force_reindex:
                 # A parse/embedding failure may predate collection creation.
                 collections = self.vector_store.client.get_collections()
                 if any(
@@ -79,10 +84,21 @@ class IngestionService:
             result = self._ingest_document(
                 path, content_type, original_filename,
                 document_id=claim.document_id,
+                skip_existing_hash=force_reindex,
             )
             self.registry.complete(
                 claim, result.document_id, result.filename, result.chunks
             )
+            if force_reindex and claim.previous_document_id:
+                # The new index is ready before retiring the old one.
+                # A cleanup failure leaves extra older chunks but must not
+                # mark the successful new index as failed.
+                try:
+                    self.vector_store.delete_document(claim.previous_document_id)
+                except Exception:
+                    logger.exception(
+                        "Reindex succeeded; old vector cleanup needs attention."
+                    )
             return result
         except Exception:
             try:
@@ -100,6 +116,7 @@ class IngestionService:
         content_type: str,
         original_filename: str | None = None,
         document_id: str | None = None,
+        skip_existing_hash: bool = False,
     ) -> IngestionResult:
         path = Path(file_path)
 
@@ -111,9 +128,8 @@ class IngestionService:
         document_hash = self._calculate_hash(path)
 
         existing_document = (
-            self.vector_store.find_document_by_hash(
-                document_hash
-            )
+            None if skip_existing_hash
+            else self.vector_store.find_document_by_hash(document_hash)
         )
 
         filename = (
