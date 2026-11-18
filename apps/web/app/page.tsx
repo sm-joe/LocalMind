@@ -610,7 +610,18 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
         body: formData,
       });
       if (!response.ok) throw await responseError(response, "Document upload failed.");
-      const data = (await response.json()) as UploadResponse;
+      let data = (await response.json()) as UploadResponse;
+      if (data.status === "already_indexed" && window.confirm(
+        "This file is already indexed. Rebuild its search index from the original document? " +
+        "This can recover content missed by older DOCX parsing. The existing index stays available until replacement succeeds."
+      )) {
+        const rebuild = await fetch(`${API_URL}/documents/upload?reindex=true`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!rebuild.ok) throw await responseError(rebuild, "Document reindexing failed.");
+        data = (await rebuild.json()) as UploadResponse;
+      }
       await loadDocuments();
       setDocumentError(null);
       setUploadNotice(data.status === "already_indexed"
