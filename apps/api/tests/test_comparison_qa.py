@@ -53,7 +53,10 @@ def test_ec2_versus_iam_rejects_iam_user_role_answer():
         "difference between ec2 and iam"
     ))
     answer = events[-1][1].answer
-    assert "couldn't verify an answer that compares both" in answer
+    assert "From the indexed document:" in answer
+    assert "EC2 is a compute service" in answer
+    assert "IAM manages identities" in answer
+    assert "[1]" in answer and "[2]" in answer
     assert "IAM Role uses temporary" not in answer
 
 
