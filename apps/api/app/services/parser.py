@@ -72,12 +72,12 @@ def parse_document(
 
 
 def _parse_pdf(path: Path) -> str:
-    import fitz
+    import pymupdf
 
     pages: list[str] = []
 
     try:
-        with fitz.open(path) as document:
+        with pymupdf.open(path) as document:
             page_count = len(document)
 
             if page_count > MAX_PDF_PAGES:

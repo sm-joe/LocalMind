@@ -7,6 +7,8 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from ollama import Client
 
+from app.services.vector_store import QDRANT_TIMEOUT_SECONDS
+
 
 OLLAMA_BASE_URL = os.getenv(
     "OLLAMA_BASE_URL",
@@ -41,6 +43,7 @@ def qdrant_client() -> QdrantClient:
     return QdrantClient(
         host=QDRANT_HOST,
         port=QDRANT_PORT,
+        timeout=QDRANT_TIMEOUT_SECONDS,
     )
 
 

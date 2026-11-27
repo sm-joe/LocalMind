@@ -286,3 +286,27 @@ def test_multiple_blank_lines_do_not_create_empty_chunks():
         "Third paragraph."
         in chunks[0].text
     )
+
+
+def test_repeated_text_and_line_breaks_keep_source_offsets():
+    text = "Same phrase.\nSame phrase.\nLast phrase."
+    chunks = chunk_text(text, chunk_size=12, chunk_overlap=0)
+
+    assert [chunk.start_char for chunk in chunks] == [0, 13, 26]
+    assert [text[chunk.start_char:chunk.end_char] for chunk in chunks] == [
+        "Same phrase.", "Same phrase.", "Last phrase.",
+    ]
+
+
+def test_overlap_cannot_push_long_paragraph_chunks_over_limit():
+    text = "Short.\n\nFirst full sentence. Second full sentence."
+    chunks = chunk_text(text, chunk_size=22, chunk_overlap=10)
+
+    assert [chunk.text for chunk in chunks] == [
+        "Short.", "First full sentence.", "Second full sentence.",
+    ]
+
+
+def test_paragraph_separator_counts_toward_chunk_limit():
+    chunks = chunk_text("abc\n\ndef", chunk_size=7, chunk_overlap=0)
+    assert [chunk.text for chunk in chunks] == ["abc", "def"]

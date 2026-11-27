@@ -5,6 +5,9 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 
+QDRANT_TIMEOUT_SECONDS = 30
+
+
 class VectorStore:
     def __init__(
         self,
@@ -15,6 +18,7 @@ class VectorStore:
         self.client = QdrantClient(
             host=host,
             port=port,
+            timeout=QDRANT_TIMEOUT_SECONDS,
         )
         self.collection_name = collection_name
 

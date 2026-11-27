@@ -40,10 +40,13 @@ export async function hasSession(): Promise<boolean> {
 
 export function assertSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
-  // Browsers send Origin for mutations; reject cross-site and missing Origin.
-  if (!origin) return false;
+  const host = request.headers.get("host");
+  if (!origin || !host) return false;
   try {
-    return new URL(origin).origin === new URL(request.url).origin;
+    // The standalone server builds request.url with its listener hostname.
+    // Use the authority the browser actually contacted for the origin check.
+    const protocol = new URL(request.url).protocol;
+    return new URL(origin).origin === new URL(`${protocol}//${host}`).origin;
   } catch {
     return false;
   }
