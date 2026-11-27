@@ -73,6 +73,34 @@ def test_ec2_versus_iam_accepts_direct_answer():
     assert "IAM manages AWS permissions" in answer
 
 
+def test_scoped_comparison_uses_faq_answers_instead_of_question_headings(monkeypatch):
+    class Store:
+        def iter_points(self):
+            introduction = "Background on cloud infrastructure. " * 30
+            yield point(0, introduction + "What is Amazon S3? Answer: Amazon S3 is an object storage service.")
+            yield point(1, "What is RDS Multi-AZ? Answer: RDS Multi-AZ provides database failover.")
+            yield point(2, introduction + "What is Amazon RDS? Answer: It is a managed relational database service.")
+
+    class Model:
+        def stream(self, prompt):
+            yield "They are different services."
+
+    retrieval = RetrievalService(None, Store())
+    monkeypatch.setattr(
+        retrieval, "retrieve_document_by_id",
+        lambda document_id, query: retrieval.retrieve_comparison(query, "s3", "rds"),
+    )
+    events = list(RAGService(retrieval, Model()).stream_answer(
+        "What is the difference between S3 and RDS?", document_id="interviews"
+    ))
+    answer = events[-1][1].answer
+
+    assert "Amazon S3 is an object storage service." in answer
+    assert "managed relational database service." in answer
+    assert "What is" not in answer
+    assert "Multi-AZ" not in answer
+
+
 def test_comparison_does_not_guess_when_one_subject_missing():
     class Embedding:
         def embed(self, query):

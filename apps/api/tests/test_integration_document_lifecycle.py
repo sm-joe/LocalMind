@@ -9,6 +9,7 @@ from qdrant_client import QdrantClient
 from app.config import get_settings
 from app.main import app
 from app.routes import documents as documents_route
+from app.services.vector_store import QDRANT_TIMEOUT_SECONDS
 
 
 def wait_for_services(
@@ -58,6 +59,7 @@ def test_document_lifecycle_upload_duplicate_list_delete(
     qdrant = QdrantClient(
         host=settings.qdrant_host,
         port=settings.qdrant_port,
+        timeout=QDRANT_TIMEOUT_SECONDS,
     )
     ollama = OllamaClient(
         host=settings.ollama_base_url,

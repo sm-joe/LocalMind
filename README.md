@@ -296,8 +296,8 @@ The runtime Ollama container does not require Internet access. Only `ollama-init
 Install:
 
 - Git
-- Docker Desktop
-- Docker Compose
+- A running Docker engine (Docker Desktop with WSL integration on Windows)
+- Docker Compose v2
 
 You do **not** need a host installation of:
 
@@ -338,31 +338,28 @@ Create a local environment file if one does not already exist:
 cp -n .env.example .env
 ```
 
-Set strong, independent private values for `POSTGRES_PASSWORD`, `LOCALMIND_API_KEY` (32+ characters), `LOCALMIND_ADMIN_PASSWORD` (12+ characters), and `LOCALMIND_SESSION_SECRET` (32+ characters) in the repository-root `.env` file. You can generate values using `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`. Keep `.env` private and out of Git; do not put real secrets in `.env.example`. Existing `LOCALRAG_*` secret variables remain supported for backward compatibility.
+Set strong, independent private values for `POSTGRES_PASSWORD`, `LOCALMIND_API_KEY` (32+ characters), `LOCALMIND_ADMIN_PASSWORD` (12+ characters), and `LOCALMIND_SESSION_SECRET` (32+ characters) in the repository-root `.env` file. Run `openssl rand -hex 32` once for each value. Keep `.env` private and out of Git. Existing `LOCALRAG_*` secret variables remain supported.
 
-## 3. Build
-
-```bash
-docker compose build
-```
-
-The build creates the application and Ollama images without downloading model artifacts. Model provisioning happens during first startup through the `ollama-init` service. No manual model download is required.
-
-## 4. Start
+## 3. Build and start
 
 ```bash
-docker compose up -d
+docker compose version
+docker info --format '{{.ServerVersion}}'
+docker compose config --quiet
+docker compose up -d --build
 ```
 
-## 5. Check services
+The first startup requires Internet access to download the images and models. The `ollama-init` service provisions the models and exits. Subsequent starts reuse the model volume.
+
+## 4. Check services
 
 ```bash
-docker compose ps
+docker compose ps -a
 ```
 
-You should see the web, API, PostgreSQL, Qdrant, and Ollama services (plus the one-shot model provisioning service when it runs)
+The web, API, PostgreSQL, Qdrant, and Ollama services should be running. The one-shot `ollama-init` service should show exit code 0. If startup fails, run `docker compose logs --tail=100 ollama-init api web`.
 
-## 6. Open the application
+## 5. Open the application
 
 Open and sign in with `LOCALMIND_ADMIN_PASSWORD`:
 
@@ -377,7 +374,9 @@ curl -fsS http://127.0.0.1:8000/health
 curl -fsS http://127.0.0.1:8000/ready
 ```
 
-Readiness may return HTTP 503 during model provisioning. Protected API routes require `X-API-Key`; the browser uses the signed-session Next.js proxy.
+The API starts after model provisioning finishes. If `/ready` returns HTTP 503, its response identifies the unavailable dependency. Protected API routes require the `X-API-Key` header. The browser supplies authentication through the signed-session Next.js proxy.
+
+After signing in, upload a text file containing a fact, then ask a question about that fact. Open the answer's citation to inspect the indexed passage.
 
 ---
 
@@ -848,6 +847,12 @@ Run the API test suite inside the container:
 docker compose exec api pytest -q
 ```
 
+Run the live RAG smoke test after `/ready` succeeds. It creates a temporary text file, uploads it, and searches Qdrant with a real Ollama embedding. It checks that both the JSON and streaming chat endpoints return the expected fact and cite the uploaded passage.
+
+```bash
+docker compose exec -T -e RUN_LIVE_RAG_ACCEPTANCE=1 api pytest -q tests/test_live_rag_acceptance.py
+```
+
 Run the focused RAG and retrieval tests:
 
 ```bash
@@ -857,13 +862,16 @@ docker compose exec api pytest -q tests/test_rag.py tests/test_retrieval.py
 Run Web lint:
 
 ```bash
-docker compose exec web npm run lint
+cd apps/web
+npm ci
+npm run lint
 ```
 
 Run Web type checking:
 
 ```bash
-docker compose exec web npm run typecheck
+npm run typecheck
+npm run build
 ```
 
 ---

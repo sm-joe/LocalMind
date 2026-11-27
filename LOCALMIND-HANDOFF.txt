@@ -1,0 +1,34 @@
+LocalMind RAG audit handoff
+
+Repository: sm-joe/LocalMind
+Branch: localmind-rag-audit
+Audit fixes: commit 15952e7
+
+Tell Codex: "Read LOCALMIND-HANDOFF.txt and finish the verification."
+
+The audit fixes cover Compose credential handling, first-upload Qdrant
+timeouts, chunk boundaries and source offsets, blocking ingestion, and local
+web sign-in. Start from the branch's existing changes.
+
+The previous laptop passed 227 host-side Python tests, web lint, TypeScript
+checking, the production web build, standalone sign-in, and the live document
+lifecycle and vector search tests. WSL stopped responding during Ollama
+generation. The full API suite with live acceptance still needs a clean pass.
+
+Use the README to create a fresh private .env and set the required secrets.
+Keep the default llama3.2:3b model for the first run. In Bash, from the
+repository root, run:
+
+  docker compose config --quiet
+  docker compose up -d --build
+  docker compose ps -a
+  curl -fsS http://127.0.0.1:8000/ready
+  docker compose exec -T -e RUN_LIVE_RAG_ACCEPTANCE=1 api pytest -q
+
+Run pytest after readiness succeeds. The live acceptance test must upload a
+temporary text file, find it in Qdrant, and verify that real Ollama generation
+returns the expected fact and citation in both JSON and streaming chat.
+
+Fix any failures and rerun the suite. Then verify that sign-in, document
+upload, and source preview work through the web UI at http://localhost:3000.
+Report what passed and any remaining blocker.

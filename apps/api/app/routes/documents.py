@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from app.config import get_settings
 from app.services.embeddings import EmbeddingService
@@ -324,14 +325,16 @@ async def upload_document(
                 detail="Uploaded file is empty.",
             )
 
-        _validate_file_content(
+        await run_in_threadpool(
+            _validate_file_content,
             path=temporary_path,
             extension=extension,
         )
 
-        service = create_ingestion_service()
+        service = await run_in_threadpool(create_ingestion_service)
 
-        result = service.ingest(
+        result = await run_in_threadpool(
+            service.ingest,
             file_path=temporary_path,
             content_type=file.content_type
             or "application/octet-stream",
