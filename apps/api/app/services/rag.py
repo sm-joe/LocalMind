@@ -495,7 +495,7 @@ class RAGService:
             if answer == self.INVALID_CITATION_ANSWER:
                 if comparison:
                     answer = self._comparison_evidence_answer(
-                        chunks, comparison.group(1), comparison.group(2)
+                        candidates, comparison.group(1), comparison.group(2)
                     )
                 elif summary and raw_answer:
                     # A document-wide synthesis is not the same as a cited
@@ -509,11 +509,7 @@ class RAGService:
                         "summary statements do not have verified inline citations."
                     )
                 else:
-                    answer = (
-                        "Unverified answer (citation or source validation failed):\n\n"
-                        + raw_answer
-                        if raw_answer else self.INVALID_CITATION_ANSWER
-                    )
+                    answer = self.NO_CONTEXT_ANSWER
         else:
             if named_entity:
                 answer = (
@@ -547,20 +543,27 @@ class RAGService:
         """
         lines = []
         for label in (left, right):
-            pattern = re.compile(
-                rf"(?<![a-z0-9]){re.escape(label)}(?![a-z0-9])",
+            subject = rf"(?:Amazon\s+|AWS\s+)?{re.escape(label)}"
+            definition = re.compile(
+                rf"^(?:The\s+)?{subject}(?:\s*\([^)]*\))?\s+"
+                r"(?:is|are|provides?|manages?|allows?|offers?|controls?|enables?|stores?)\b",
+                re.IGNORECASE,
+            )
+            heading = re.compile(
+                rf"\bwhat\s+(?:is|are)\s+(?:the\s+)?{subject}\s*\?$",
                 re.IGNORECASE,
             )
             options = []
             for source_id, chunk in enumerate(chunks, 1):
-                for sentence in re.split(r"(?<=[.!?])\s+", chunk.text):
-                    if pattern.search(sentence):
-                        sentence = " ".join(sentence.split())
-                        definitional = bool(re.search(
-                            r"\b(?:is|provides|manages|allows|offers|used for)\b",
-                            sentence, re.IGNORECASE
-                        ))
-                        options.append((definitional, -len(sentence), source_id, sentence))
+                follows_heading = False
+                for sentence in re.split(r"(?<=[.!?])\s+|\n\s*\n", chunk.text):
+                    sentence = " ".join(sentence.split())
+                    excerpt = re.sub(r"^answer:\s*", "", sentence, flags=re.IGNORECASE)
+                    if excerpt and not excerpt.endswith("?"):
+                        direct_definition = bool(definition.match(excerpt))
+                        if direct_definition or (follows_heading and excerpt != sentence):
+                            options.append((direct_definition, -len(excerpt), source_id, excerpt))
+                    follows_heading = bool(heading.search(sentence))
             if not options:
                 return cls.NO_CONTEXT_ANSWER
             _, _, source_id, sentence = max(options)
